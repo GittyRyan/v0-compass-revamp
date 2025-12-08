@@ -22,6 +22,27 @@ const sizeLabels: Record<string, string> = {
   enterprise: "Enterprise",
 }
 
+const acvRationale: Record<string, Record<string, string>> = {
+  low: {
+    strong:
+      "Effective for low-ACV, high-velocity inbound and product-led motions where volume offsets smaller deal sizes.",
+    partial: "Your low ACV may require higher lead volume to reach revenue targets with this motion.",
+    weak: "This motion is typically optimized for higher ACV deals; expect more effort to make unit economics work.",
+  },
+  mid: {
+    strong:
+      "This motion aligns well with your mid-ACV balanced sales model, supporting both efficiency and deal quality.",
+    partial: "Your mid-market ACV fits moderately well; fine-tune targeting to maximize conversion rates.",
+    weak: "Mid-ACV deals may underperform with this motion unless you adapt the approach significantly.",
+  },
+  high: {
+    strong:
+      "Strong alignment with high-ACV enterprise outreach where deal size justifies the investment in this motion.",
+    partial: "Your high ACV provides solid foundation for this motion with some adaptation needed.",
+    weak: "High-ACV deals typically require more personalized motions; this approach may feel too generic.",
+  },
+}
+
 export function buildWhyRecommendation(
   motion: MotionConfig,
   scores: MotionScoreBreakdown,
@@ -32,7 +53,7 @@ export function buildWhyRecommendation(
   // 1) Objective fit
   if (scores.objectiveFit >= 80) {
     reasons.push(
-      `Strong alignment with your primary GTM objective of ${objectiveLabels[inputs.primaryObjective] || inputs.primaryObjective}.`,
+      `Strong alignment with your primary GTM objective of ${objectiveLabels[inputs.primaryObjective || ""] || inputs.primaryObjective || "pipeline generation"}.`,
     )
   } else if (scores.objectiveFit >= 60) {
     reasons.push(
@@ -53,15 +74,25 @@ export function buildWhyRecommendation(
     reasons.push(`Designed primarily for different company sizes, which can add execution friction for your team.`)
   }
 
-  // 3) ACV / offering fit
-  if (scores.acvFit >= 80) {
-    reasons.push(
-      `Matches your ${acvLabels[inputs.acvBand] || inputs.acvBand} ACV offering, making targeting and deal structure more straightforward.`,
-    )
-  } else if (scores.acvFit < 60) {
-    reasons.push(
-      `Your current price point is atypical for this motion; expect more iteration on packaging and pricing.`,
-    )
+  // 3) ACV / offering fit - now with specific rationale based on ACV band
+  if (inputs.acvBand) {
+    const acvBand = inputs.acvBand
+    if (scores.acvFit >= 80) {
+      reasons.push(
+        acvRationale[acvBand]?.strong ||
+          `Matches your ${acvLabels[acvBand] || acvBand} ACV offering, making targeting and deal structure more straightforward.`,
+      )
+    } else if (scores.acvFit >= 60) {
+      reasons.push(
+        acvRationale[acvBand]?.partial ||
+          `Your ACV band shows partial alignment with this motion; some optimization may be needed.`,
+      )
+    } else {
+      reasons.push(
+        acvRationale[acvBand]?.weak ||
+          `Your current price point is atypical for this motion; expect more iteration on packaging and pricing.`,
+      )
+    }
   }
 
   // 4) Persona fit

@@ -259,8 +259,29 @@ export function GTMSelectorTab() {
       .filter(Boolean)
 
   const hasRequiredInputs = useMemo(() => {
-    return !!primaryObjective && !!acvBand
-  }, [primaryObjective, acvBand])
+    const personas = parsePersonas(targetPersonas)
+    return (
+      !!industry &&
+      !!companySize &&
+      !!region &&
+      !!primaryObjective &&
+      !!acvBand &&
+      !!targetCompanySize &&
+      personas.length > 0
+    )
+  }, [industry, companySize, region, primaryObjective, acvBand, targetCompanySize, targetPersonas])
+
+  const missingInputs = useMemo(() => {
+    const missing: string[] = []
+    if (!industry) missing.push("Industry")
+    if (!companySize) missing.push("Company Size")
+    if (!region) missing.push("Region")
+    if (!primaryObjective) missing.push("Primary GTM Objective")
+    if (!acvBand) missing.push("ACV Band")
+    if (!targetCompanySize) missing.push("Target Company Size")
+    if (parsePersonas(targetPersonas).length === 0) missing.push("Target Personas")
+    return missing
+  }, [industry, companySize, region, primaryObjective, acvBand, targetCompanySize, targetPersonas])
 
   const selectorInputs: SelectorInputs = useMemo(
     () => ({
@@ -661,41 +682,16 @@ export function GTMSelectorTab() {
           </div>
 
           {!hasRequiredInputs ? (
-            <Card className="border-amber-200 bg-amber-50">
-              <CardContent className="p-6">
-                <div className="flex items-start gap-3">
-                  <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
-                  <div className="space-y-2">
-                    <h4 className="font-semibold text-amber-800">Complete Required Inputs</h4>
-                    <p className="text-sm text-amber-700">
-                      Set <span className="font-medium">Primary GTM Objective</span> and{" "}
-                      <span className="font-medium">ACV Band</span> in the GTM Goals & Offering section to see
-                      personalized GTM recommendations.
-                    </p>
-                    <div className="flex gap-2 pt-2">
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "text-xs",
-                          primaryObjective ? "border-green-500 text-green-700" : "border-amber-500 text-amber-700",
-                        )}
-                      >
-                        {primaryObjective ? <Check className="h-3 w-3 mr-1" /> : null}
-                        Primary Objective {primaryObjective ? "Set" : "Required"}
-                      </Badge>
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "text-xs",
-                          acvBand ? "border-green-500 text-green-700" : "border-amber-500 text-amber-700",
-                        )}
-                      >
-                        {acvBand ? <Check className="h-3 w-3 mr-1" /> : null}
-                        ACV Band {acvBand ? "Set" : "Required"}
-                      </Badge>
-                    </div>
-                  </div>
+            <Card className="border-dashed">
+              <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
+                  <AlertCircle className="h-6 w-6 text-muted-foreground" />
                 </div>
+                <h4 className="font-medium text-foreground mb-2">Waiting for Required Inputs</h4>
+                <p className="text-sm text-muted-foreground max-w-[220px]">
+                  Set Industry, Company Size, Region, Objective, ACV, Target Size, and Personas to preview an AI GTM
+                  plan.
+                </p>
               </CardContent>
             </Card>
           ) : (
@@ -886,9 +882,10 @@ export function GTMSelectorTab() {
                 <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
                   <AlertCircle className="h-6 w-6 text-muted-foreground" />
                 </div>
-                <h4 className="font-medium text-foreground mb-2">Complete Required Inputs</h4>
-                <p className="text-sm text-muted-foreground max-w-[200px]">
-                  Set Primary GTM Objective and ACV Band to preview an AI GTM plan.
+                <h4 className="font-medium text-foreground mb-2">Waiting for Required Inputs</h4>
+                <p className="text-sm text-muted-foreground max-w-[220px]">
+                  Set Industry, Company Size, Region, Objective, ACV, Target Size, and Personas to preview an AI GTM
+                  plan.
                 </p>
               </CardContent>
             </Card>

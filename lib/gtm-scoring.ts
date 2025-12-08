@@ -64,6 +64,20 @@ const isAdjacentAcv = (a: AcvBand, b: AcvBand): boolean => {
   return false
 }
 
+// PLG and Inbound favor low ACV (high velocity), ABM/Vertical/Expansion favor high ACV
+const ACV_MOTION_AFFINITY: Record<MotionId, Record<AcvBand, number>> = {
+  // PLG: strong for low ACV, decent for mid, weak for high
+  plg: { low: 95, mid: 75, high: 45 },
+  // Inbound: strong for low ACV, decent for mid, weak for high
+  inbound_engine: { low: 90, mid: 80, high: 50 },
+  // Outbound ABM: weak for low, decent for mid, strong for high
+  outbound_abm: { low: 45, mid: 75, high: 95 },
+  // Vertical: weak for low, decent for mid, strong for high
+  vertical_motion: { low: 50, mid: 70, high: 92 },
+  // Customer Expansion: moderate for low, good for mid, strong for high
+  customer_expansion: { low: 55, mid: 80, high: 90 },
+}
+
 // ---- Import library-driven motion configs ----
 import { MOTION_CONFIGS_FROM_LIBRARY } from "@/lib/gtm-motions"
 
@@ -88,6 +102,12 @@ function computeSizeFit(motion: MotionConfig, size: CompanySize): number {
 }
 
 function computeAcvFit(motion: MotionConfig, acv: AcvBand): number {
+  // Use motion-specific affinity matrix for differentiated scoring
+  const affinityScores = ACV_MOTION_AFFINITY[motion.id]
+  if (affinityScores) {
+    return affinityScores[acv]
+  }
+  // Fallback to original logic if motion not in affinity map
   if (motion.bestForAcv.includes(acv)) return 100
   if (motion.bestForAcv.some((a) => isAdjacentAcv(acv, a))) {
     return 70
