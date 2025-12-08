@@ -1,6 +1,5 @@
 "use client"
 
-import { useState } from "react"
 import { cn } from "@/lib/utils"
 import { GTMSelectorTab } from "./tabs/gtm-selector-tab"
 import { GTMSetupTab } from "./tabs/gtm-setup-tab"
@@ -20,9 +19,13 @@ const tabs = [
   { id: "gtm-report", label: "GTM Report" },
 ]
 
-export function CompassTabs() {
-  const [activeTab, setActiveTab] = useState("gtm-selector")
+interface CompassTabsProps {
+  activeTab: string
+  onTabChange: (tab: string) => void
+  setupResetKey: number
+}
 
+export function CompassTabs({ activeTab, onTabChange, setupResetKey }: CompassTabsProps) {
   return (
     <div className="flex flex-col gap-6">
       {/* Tab Navigation */}
@@ -31,7 +34,7 @@ export function CompassTabs() {
           {tabs.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => onTabChange(tab.id)}
               className={cn(
                 "shrink-0 border-b-2 px-4 py-3 text-sm font-medium transition-colors",
                 activeTab === tab.id
@@ -48,7 +51,7 @@ export function CompassTabs() {
       {/* Tab Content */}
       <div>
         {activeTab === "gtm-selector" && <GTMSelectorTab />}
-        {activeTab === "gtm-setup" && <GTMSetupTab />}
+        {activeTab === "gtm-setup" && <GTMSetupTab key={setupResetKey} />}
         {activeTab === "analyze-position" && <AnalyzePositionTab />}
         {activeTab === "analyze-market" && <AnalyzeMarketTab />}
         {activeTab === "analyze-competition" && <AnalyzeCompetitionTab />}

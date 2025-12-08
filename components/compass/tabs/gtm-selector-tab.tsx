@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Progress } from "@/components/ui/progress"
 import {
   Select,
   SelectContent,
@@ -26,19 +27,24 @@ import {
   mapTimeHorizonToScoring,
   type SelectorInputs,
   type MotionId,
+  type MotionScoreBreakdown,
 } from "@/lib/gtm-scoring"
 import { buildWhyRecommendation } from "@/lib/gtm-explanation"
+import { GTM_MOTION_LIBRARY, type GtmMotion } from "@/lib/gtm-motions"
 import {
   Bookmark,
   Check,
   ChevronDown,
   ChevronRight,
-  Clock,
+  Download,
   Sparkles,
   Target,
   TrendingUp,
   Users,
   Zap,
+  BarChart3,
+  Clock,
+  Settings2,
 } from "lucide-react"
 
 const motionMetadata: Record<
@@ -76,13 +82,85 @@ const motionMetadata: Record<
     ],
     socialProof: "~58% of successful vertical plays show 2x faster sales cycles.",
   },
+  inbound_engine: {
+    id: 4,
+    drivers: [
+      "Scalable demand capture infrastructure",
+      "Content-driven lead generation",
+      "Marketing automation leverage",
+    ],
+    socialProof: "~61% of B2B SaaS companies rely on inbound as primary demand source.",
+  },
+  customer_expansion: {
+    id: 5,
+    drivers: [
+      "Existing customer relationships as foundation",
+      "Usage data signals expansion opportunities",
+      "Lower CAC than new logo acquisition",
+    ],
+    socialProof: "~85% of revenue for mature SaaS comes from expansion.",
+  },
 }
+
+const expectedOutcomesByMotionId: Record<MotionId, string[]> = {
+  outbound_abm: ["+18% SQL Volume", "+12% ACV", "-15% Sales Cycle"],
+  plg: ["+25% Sign-ups", "+15% PQL-to-SQL", "-10% CAC"],
+  vertical_motion: ["+20% Win Rate", "+15% Deal Size", "-12% Sales Cycle"],
+  inbound_engine: ["+30% Inbound MQLs", "+20% Organic Traffic", "-8% CAC"],
+  customer_expansion: ["+10% NRR", "+18% Expansion Revenue", "-15% Churn"],
+}
+
+const planPreviewByMotionId: Record<MotionId, string[]> = {
+  outbound_abm: [
+    "0–30 days: Define ICP and build target account list",
+    "31–60 days: Launch 2–3 outbound sequences across email and LinkedIn",
+    "61–90 days: Optimize messaging and expand to lookalike accounts",
+  ],
+  plg: [
+    "0–30 days: Optimize signup flow and onboarding experience",
+    "31–60 days: Implement in-product growth loops and referral mechanics",
+    "61–90 days: Launch self-serve upgrade paths and usage-based triggers",
+  ],
+  vertical_motion: [
+    "0–30 days: Map vertical-specific pain points and compliance requirements",
+    "31–60 days: Develop tailored messaging and case studies for the vertical",
+    "61–90 days: Engage vertical-specific channels and events",
+  ],
+  inbound_engine: [
+    "0–30 days: Audit content gaps and SEO opportunities",
+    "31–60 days: Launch content production and distribution campaigns",
+    "61–90 days: Optimize conversion paths and lead nurture sequences",
+  ],
+  customer_expansion: [
+    "0–30 days: Identify expansion signals from usage data",
+    "31–60 days: Launch targeted upsell and cross-sell campaigns",
+    "61–90 days: Implement customer success playbooks for retention",
+  ],
+}
+
+const planSummaryByMotionId: Record<MotionId, string> = {
+  outbound_abm:
+    "this plan focuses on 200–300 target accounts, multi-threaded into VP Sales/CRO with outbound email and LinkedIn as primary channels.",
+  plg: "this plan emphasizes product-led acquisition with self-serve onboarding, viral loops, and usage-based conversion triggers.",
+  vertical_motion:
+    "this plan targets deep vertical penetration with tailored messaging, compliance positioning, and industry-specific case studies.",
+  inbound_engine:
+    "this plan builds scalable demand capture through content marketing, SEO optimization, and automated lead nurturing.",
+  customer_expansion:
+    "this plan maximizes existing customer value through usage-based expansion signals, proactive outreach, and retention playbooks.",
+}
+
+const motionLibraryById: Record<MotionId, GtmMotion> = Object.fromEntries(
+  GTM_MOTION_LIBRARY.map((m) => [m.id, m]),
+) as Record<MotionId, GtmMotion>
 
 const savedPlans = [
   { id: 1, name: "Q1 Enterprise Push", date: "Dec 15, 2024", motion: "Outbound ABM" },
   { id: 2, name: "SMB Expansion", date: "Dec 10, 2024", motion: "Product-Led Growth" },
   { id: 3, name: "Healthcare Vertical", date: "Dec 5, 2024", motion: "Vertical-Specific" },
 ]
+
+const TOP_N_MOTIONS = 3
 
 export function GTMSelectorTab() {
   const [companySize, setCompanySize] = useState("mid-market")
@@ -96,6 +174,8 @@ export function GTMSelectorTab() {
 
   const [selectedMotion, setSelectedMotion] = useState<MotionId | null>(null)
   const [expandedCard, setExpandedCard] = useState<MotionId | null>(null)
+
+  const [executionMode, setExecutionMode] = useState<"conservative" | "standard" | "aggressive">("standard")
 
   const clampPercent = (value?: number) => Math.min(100, Math.max(0, value ?? 0))
 
@@ -118,11 +198,16 @@ export function GTMSelectorTab() {
 
   const motionScores = useMemo(() => scoreAllMotions(selectorInputs), [selectorInputs])
 
+  const sortedScores = useMemo(() => {
+    return [...motionScores].sort((a, b) => b.matchPercent - a.matchPercent)
+  }, [motionScores])
+
+  const recommendedScores = useMemo(() => {
+    return sortedScores.slice(0, TOP_N_MOTIONS)
+  }, [sortedScores])
+
   const scoresById = useMemo(() => {
-    return Object.fromEntries(motionScores.map((m) => [m.motionId, m])) as Record<
-      MotionId,
-      (typeof motionScores)[number]
-    >
+    return Object.fromEntries(motionScores.map((m) => [m.motionId, m])) as Record<MotionId, MotionScoreBreakdown>
   }, [motionScores])
 
   const explainersById = useMemo(() => {
@@ -178,25 +263,25 @@ export function GTMSelectorTab() {
                   <div className="space-y-1.5">
                     <Label className="text-xs">Company Size</Label>
                     <Select value={companySize} onValueChange={setCompanySize}>
-                      <SelectTrigger className="h-8 text-sm">
-                        <SelectValue />
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue placeholder="Select size" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="smb">SMB (1-100)</SelectItem>
-                        <SelectItem value="mid-market">Mid-Market (101-1000)</SelectItem>
-                        <SelectItem value="enterprise">Enterprise (1000+)</SelectItem>
+                        <SelectItem value="smb">SMB</SelectItem>
+                        <SelectItem value="mid-market">Mid-Market</SelectItem>
+                        <SelectItem value="enterprise">Enterprise</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs">Region</Label>
                     <Select value={region} onValueChange={setRegion}>
-                      <SelectTrigger className="h-8 text-sm">
-                        <SelectValue />
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue placeholder="Select region" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="north-america">North America</SelectItem>
-                        <SelectItem value="europe">Europe</SelectItem>
+                        <SelectItem value="emea">EMEA</SelectItem>
                         <SelectItem value="apac">APAC</SelectItem>
                         <SelectItem value="latam">LATAM</SelectItem>
                       </SelectContent>
@@ -205,14 +290,15 @@ export function GTMSelectorTab() {
                   <div className="space-y-1.5">
                     <Label className="text-xs">Industry</Label>
                     <Select value={industry} onValueChange={setIndustry}>
-                      <SelectTrigger className="h-8 text-sm">
-                        <SelectValue />
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue placeholder="Select industry" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="saas-tech">SaaS / Technology</SelectItem>
-                        <SelectItem value="financial">Financial Services</SelectItem>
+                        <SelectItem value="financial-services">Financial Services</SelectItem>
                         <SelectItem value="healthcare">Healthcare</SelectItem>
                         <SelectItem value="manufacturing">Manufacturing</SelectItem>
+                        <SelectItem value="retail">Retail / E-commerce</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -278,7 +364,7 @@ export function GTMSelectorTab() {
                   <div className="space-y-1.5">
                     <Label className="text-xs">Primary GTM Objective *</Label>
                     <Select value={primaryObjective} onValueChange={setPrimaryObjective}>
-                      <SelectTrigger className="h-8 text-sm">
+                      <SelectTrigger className="h-9 text-sm">
                         <SelectValue placeholder="Select objective" />
                       </SelectTrigger>
                       <SelectContent>
@@ -331,27 +417,22 @@ export function GTMSelectorTab() {
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs">Time Horizon</Label>
-                    <div className="flex gap-1">
-                      {["3", "6", "9", "12"].map((months) => (
-                        <button
-                          key={months}
-                          onClick={() => setTimeHorizon(months)}
-                          className={cn(
-                            "flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
-                            timeHorizon === months
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-                          )}
-                        >
-                          {months}mo
-                        </button>
-                      ))}
-                    </div>
+                    <Select value={timeHorizon} onValueChange={setTimeHorizon}>
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue placeholder="Select timeframe" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="3">3 Months</SelectItem>
+                        <SelectItem value="6">6 Months</SelectItem>
+                        <SelectItem value="9">9 Months</SelectItem>
+                        <SelectItem value="12">12 Months</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs">Annual Deal Size (GTM Goal) *</Label>
                     <Select value={acvBand} onValueChange={setAcvBand}>
-                      <SelectTrigger className="h-8 text-sm">
+                      <SelectTrigger className="h-9 text-sm">
                         <SelectValue placeholder="Select band" />
                       </SelectTrigger>
                       <SelectContent>
@@ -365,17 +446,38 @@ export function GTMSelectorTab() {
                   <div className="space-y-1.5">
                     <Label className="text-xs">Primary Offering *</Label>
                     <Input
-                      className="h-8 text-sm"
-                      placeholder="Enter offering for this GTM strategy"
+                      placeholder="Enter your primary offering"
+                      className="h-9 text-sm"
                       value={primaryOffering}
                       onChange={(e) => setPrimaryOffering(e.target.value)}
                     />
                   </div>
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
+
+          {/* Target Audience */}
+          <Collapsible defaultOpen>
+            <Card>
+              <CollapsibleTrigger asChild>
+                <CardHeader className="cursor-pointer py-3 px-4">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm font-medium flex items-center gap-2">
+                      <Users className="h-4 w-4 text-primary" />
+                      Target Audience
+                    </CardTitle>
+                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="pt-0 pb-4 px-4 space-y-3">
                   <div className="space-y-1.5">
                     <Label className="text-xs">Target Personas</Label>
                     <Input
-                      className="h-8 text-sm"
-                      placeholder="Enter target personas"
+                      placeholder="e.g., VP Sales, CRO, RevOps"
+                      className="h-9 text-sm"
                       value={targetPersonas}
                       onChange={(e) => setTargetPersonas(e.target.value)}
                     />
@@ -393,30 +495,29 @@ export function GTMSelectorTab() {
             <h3 className="font-semibold text-foreground">Recommended GTM Motions</h3>
           </div>
 
-          {/* GTM Motion Cards */}
           <div className="space-y-4">
-            {MOTION_CONFIGS.map((motion) => {
-              const score = scoresById[motion.id]
-              const metadata = motionMetadata[motion.id]
-              const reasons = explainersById[motion.id] ?? []
-              const effort = clampPercent(score?.effort)
-              const impact = clampPercent(score?.impact)
-              const matchPercent = clampPercent(score?.matchPercent)
-              const objectiveFit = clampPercent(score?.objectiveFit)
-              const sizeFit = clampPercent(score?.sizeFit)
-              const acvFit = clampPercent(score?.acvFit)
-              const personaFit = clampPercent(score?.personaFit)
+            {recommendedScores.map((score, index) => {
+              const metadata = motionMetadata[score.motionId]
+              const libraryMotion = motionLibraryById[score.motionId]
+              const reasons = explainersById[score.motionId] ?? []
+              const effort = clampPercent(score.effort)
+              const impact = clampPercent(score.impact)
+              const matchPercent = clampPercent(score.matchPercent)
+              const objectiveFit = clampPercent(score.objectiveFit)
+              const sizeFit = clampPercent(score.sizeFit)
+              const acvFit = clampPercent(score.acvFit)
+              const personaFit = clampPercent(score.personaFit)
 
-              if (!score) {
+              if (!metadata) {
                 return (
-                  <Card key={motion.id} className="transition-all">
+                  <Card key={score.motionId} className="transition-all">
                     <CardContent className="p-4">
                       <div className="flex items-center gap-3 mb-2">
                         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
-                          {metadata.id}
+                          {index + 1}
                         </div>
                         <div>
-                          <h4 className="font-semibold text-foreground">{motion.name}</h4>
+                          <h4 className="font-semibold text-foreground">{score.name}</h4>
                           <p className="text-xs text-muted-foreground">Unable to compute recommendation.</p>
                         </div>
                       </div>
@@ -434,7 +535,7 @@ export function GTMSelectorTab() {
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex items-center gap-3">
                         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
-                          {metadata.id}
+                          {index + 1}
                         </div>
                         <div>
                           <h4 className="font-semibold text-foreground">{score.name}</h4>
@@ -519,12 +620,12 @@ export function GTMSelectorTab() {
                           <ul className="space-y-2 mb-3">
                             {reasons.map((reason, idx) => (
                               <li key={idx} className="flex items-start gap-2">
-                                <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
+                                <ChevronRight className="h-4 w-4 text-primary mt-0.5 shrink-0" />
                                 <span>{reason}</span>
                               </li>
                             ))}
                           </ul>
-                          <div className="grid grid-cols-2 gap-2 text-xs border-t pt-2 mt-2">
+                          <div className="grid grid-cols-2 gap-2 text-xs">
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Objective Fit:</span>
                               <span className="font-medium">{objectiveFit}%</span>
@@ -546,14 +647,16 @@ export function GTMSelectorTab() {
                       </CollapsibleContent>
                     </Collapsible>
 
+                    {/* Select Button */}
                     <Button
+                      variant={selectedMotion === score.motionId ? "default" : "outline"}
+                      size="sm"
                       className="w-full"
-                      variant={selectedMotion === score.motionId ? "secondary" : "default"}
                       onClick={() => setSelectedMotion(score.motionId)}
                     >
                       {selectedMotion === score.motionId ? (
                         <>
-                          <Check className="mr-2 h-4 w-4" /> Motion Selected
+                          <Check className="mr-2 h-4 w-4" /> Selected
                         </>
                       ) : (
                         "Select This Motion"
@@ -566,69 +669,201 @@ export function GTMSelectorTab() {
           </div>
         </div>
 
-        {/* Right Column - Selected Path & Saved Plans */}
         <div className="lg:col-span-4 space-y-4">
           <div className="flex items-center gap-2 mb-4">
-            <Bookmark className="h-5 w-5 text-primary" />
+            <Zap className="h-5 w-5 text-primary" />
             <h3 className="font-semibold text-foreground">Selected GTM Path</h3>
           </div>
 
-          {/* Selected Motion Summary */}
-          <Card>
-            <CardContent className="p-4">
-              {selectedMotionData ? (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground font-bold">
-                      {selectedMotionData.id}
+          {selectedMotion && selectedMotionScores ? (
+            <Card className="border-primary/50">
+              <CardContent className="p-5 space-y-5">
+                {/* 4.1 Header + Match Snapshot */}
+                <div className="space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-1">
+                      <h4 className="font-semibold text-lg text-foreground">
+                        {motionLibraryById[selectedMotion]?.name}
+                      </h4>
+                      <p className="text-xs text-muted-foreground">AI-selected GTM path for this plan</p>
                     </div>
-                    <div>
-                      <h4 className="font-semibold text-foreground">{selectedMotionData.name}</h4>
-                      <p className="text-sm text-muted-foreground">Selected Motion</p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="text-center p-3 rounded-lg bg-accent/50">
-                      <p className="text-2xl font-bold text-primary">
-                        {clampPercent(selectedMotionData.matchPercent)}%
-                      </p>
-                      <p className="text-xs text-muted-foreground">Match</p>
-                    </div>
-                    <div className="text-center p-3 rounded-lg bg-accent/50">
-                      <p className="text-2xl font-bold text-amber-600">{clampPercent(selectedMotionData.effort)}%</p>
-                      <p className="text-xs text-muted-foreground">Effort</p>
-                    </div>
-                    <div className="text-center p-3 rounded-lg bg-accent/50">
-                      <p className="text-2xl font-bold text-green-600">{clampPercent(selectedMotionData.impact)}%</p>
-                      <p className="text-xs text-muted-foreground">Impact</p>
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-2">Predicted Outcomes</p>
-                    <div className="flex flex-wrap gap-2">
-                      <Badge variant="secondary" className="text-xs">
-                        +12% ACV
+                    <div className="flex items-center gap-2">
+                      <Badge className="bg-green-100 text-green-700 font-semibold">
+                        {clampPercent(selectedMotionScores.matchPercent)}% Match
                       </Badge>
-                      <Badge variant="secondary" className="text-xs">
-                        -15% Sales Cycle
-                      </Badge>
+                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary">
+                        <Check className="h-3.5 w-3.5 text-white" />
+                      </div>
                     </div>
                   </div>
+                  <p className="text-sm text-muted-foreground">{motionLibraryById[selectedMotion]?.description}</p>
+                </div>
 
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-2">Timeline</p>
-                    <div className="flex gap-1">
+                {/* 4.2 Plan Context (Inputs Summary) */}
+                <div className="space-y-2">
+                  <h5 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Plan Context</h5>
+                  <div className="bg-muted/50 rounded-lg p-3">
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                      <div className="text-muted-foreground">Primary Industry</div>
+                      <div className="text-foreground font-medium text-right">
+                        {industry === "saas-tech"
+                          ? "SaaS / Technology"
+                          : industry === "fintech"
+                            ? "FinTech"
+                            : industry === "healthcare"
+                              ? "Healthcare"
+                              : industry === "ecommerce"
+                                ? "E-commerce"
+                                : industry}
+                      </div>
+                      <div className="text-muted-foreground">Company Size</div>
+                      <div className="text-foreground font-medium text-right">
+                        {companySize === "smb"
+                          ? "SMB"
+                          : companySize === "mid-market"
+                            ? "Mid-Market"
+                            : companySize === "enterprise"
+                              ? "Enterprise"
+                              : "Strategic"}
+                      </div>
+                      <div className="text-muted-foreground">Key Personas</div>
+                      <div className="text-foreground font-medium text-right truncate" title={targetPersonas}>
+                        {targetPersonas || "—"}
+                      </div>
+                      <div className="text-muted-foreground">Primary Objective</div>
+                      <div className="text-foreground font-medium text-right truncate">
+                        {primaryObjective
+                          ? primaryObjective
+                              .split("-")
+                              .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+                              .join(" ")
+                          : "—"}
+                      </div>
+                      <div className="text-muted-foreground">Region</div>
+                      <div className="text-foreground font-medium text-right">
+                        {region === "north-america"
+                          ? "North America"
+                          : region === "emea"
+                            ? "EMEA"
+                            : region === "apac"
+                              ? "APAC"
+                              : region === "latam"
+                                ? "LATAM"
+                                : region}
+                      </div>
+                      {acvBand && (
+                        <>
+                          <div className="text-muted-foreground">ACV Band</div>
+                          <div className="text-foreground font-medium text-right">
+                            {acvBand === "5k-25k"
+                              ? "$5K–$25K"
+                              : acvBand === "25k-100k"
+                                ? "$25K–$100K"
+                                : acvBand === "100k-500k"
+                                  ? "$100K–$500K"
+                                  : "$500K+"}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4.3 AI Fit & Rationale */}
+                <div className="space-y-3">
+                  <h5 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Why this GTM path?
+                  </h5>
+                  <ul className="space-y-1.5">
+                    {(explainersById[selectedMotion] ?? []).slice(0, 4).map((bullet, i) => (
+                      <li key={i} className="flex items-start gap-2 text-sm text-foreground">
+                        <Sparkles className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" />
+                        <span>{bullet}</span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  {/* Fit Breakdown */}
+                  <div className="grid grid-cols-2 gap-3 pt-2">
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Objective Fit</span>
+                        <span className="font-medium">{clampPercent(selectedMotionScores.objectiveFit)}%</span>
+                      </div>
+                      <Progress value={clampPercent(selectedMotionScores.objectiveFit)} className="h-1.5" />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Size Fit</span>
+                        <span className="font-medium">{clampPercent(selectedMotionScores.sizeFit)}%</span>
+                      </div>
+                      <Progress value={clampPercent(selectedMotionScores.sizeFit)} className="h-1.5" />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">ACV Fit</span>
+                        <span className="font-medium">{clampPercent(selectedMotionScores.acvFit)}%</span>
+                      </div>
+                      <Progress value={clampPercent(selectedMotionScores.acvFit)} className="h-1.5" />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Persona Fit</span>
+                        <span className="font-medium">{clampPercent(selectedMotionScores.personaFit)}%</span>
+                      </div>
+                      <Progress value={clampPercent(selectedMotionScores.personaFit)} className="h-1.5" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4.4 Expected Outcomes */}
+                <div className="space-y-2">
+                  <h5 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Expected Outcomes
+                  </h5>
+                  <div className="flex flex-wrap gap-2">
+                    {(expectedOutcomesByMotionId[selectedMotion] ?? []).map((outcome, i) => (
+                      <Badge
+                        key={i}
+                        variant="secondary"
+                        className={cn(
+                          "text-xs font-medium px-2.5 py-1",
+                          outcome.startsWith("+") && "bg-green-50 text-green-700 border border-green-200",
+                          outcome.startsWith("-") && "bg-blue-50 text-blue-700 border border-blue-200",
+                        )}
+                      >
+                        <BarChart3 className="h-3 w-3 mr-1" />
+                        {outcome}
+                      </Badge>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground italic">
+                    Estimates are directional and based on this GTM motion and timeline.
+                  </p>
+                </div>
+
+                {/* 4.5 Timeline & Scenario Controls */}
+                <div className="space-y-3">
+                  <h5 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Timeline & Execution
+                  </h5>
+
+                  {/* Timeline Selector */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs flex items-center gap-1.5">
+                      <Clock className="h-3.5 w-3.5" />
+                      Timeline
+                    </Label>
+                    <div className="flex rounded-lg border bg-muted/30 p-0.5">
                       {["3", "6", "9", "12"].map((months) => (
                         <button
                           key={months}
                           onClick={() => setTimeHorizon(months)}
                           className={cn(
-                            "flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
+                            "flex-1 text-xs font-medium py-1.5 px-2 rounded-md transition-colors",
                             timeHorizon === months
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+                              ? "bg-primary text-primary-foreground shadow-sm"
+                              : "text-muted-foreground hover:text-foreground",
                           )}
                         >
                           {months}mo
@@ -637,51 +872,117 @@ export function GTMSelectorTab() {
                     </div>
                   </div>
 
-                  <div className="space-y-2 pt-2">
-                    <Button className="w-full">
-                      <Zap className="mr-2 h-4 w-4" />
-                      Generate GTM Plan
-                    </Button>
-                    <Button variant="outline" className="w-full bg-transparent">
-                      <Bookmark className="mr-2 h-4 w-4" />
-                      Save This Configuration
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Target className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                  <p className="text-sm">Select a GTM motion to see details</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Saved Plans */}
-          <Card>
-            <CardHeader className="py-3 px-4">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Clock className="h-4 w-4 text-primary" />
-                Saved Plans
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0 pb-4 px-4">
-              <div className="space-y-2">
-                {savedPlans.map((plan) => (
-                  <div
-                    key={plan.id}
-                    className="flex items-center justify-between p-2 rounded-lg hover:bg-accent/50 cursor-pointer transition-colors"
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-foreground">{plan.name}</p>
-                      <p className="text-xs text-muted-foreground">{plan.motion}</p>
+                  {/* Execution Mode */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs flex items-center gap-1.5">
+                      <Settings2 className="h-3.5 w-3.5" />
+                      Execution Mode
+                    </Label>
+                    <div className="flex rounded-lg border bg-muted/30 p-0.5">
+                      {(["conservative", "standard", "aggressive"] as const).map((mode) => (
+                        <button
+                          key={mode}
+                          onClick={() => setExecutionMode(mode)}
+                          className={cn(
+                            "flex-1 text-xs font-medium py-1.5 px-2 rounded-md transition-colors capitalize",
+                            executionMode === mode
+                              ? "bg-primary text-primary-foreground shadow-sm"
+                              : "text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          {mode}
+                        </button>
+                      ))}
                     </div>
-                    <span className="text-xs text-muted-foreground">{plan.date}</span>
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                </div>
+
+                {/* 4.6 AI GTM Plan Preview */}
+                <div className="space-y-2">
+                  <h5 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    AI GTM Plan Preview
+                  </h5>
+                  <div className="bg-muted/50 rounded-lg p-3 space-y-2">
+                    <ul className="space-y-1.5">
+                      {(planPreviewByMotionId[selectedMotion] ?? []).map((milestone, i) => (
+                        <li key={i} className="flex items-start gap-2 text-xs text-foreground">
+                          <ChevronRight className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" />
+                          <span>{milestone}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="text-xs text-muted-foreground pt-1 border-t border-border/50">
+                      Over the next <span className="font-medium text-foreground">{timeHorizon} months</span> in{" "}
+                      <span className="font-medium text-foreground capitalize">{executionMode}</span> mode,{" "}
+                      {planSummaryByMotionId[selectedMotion]}
+                    </p>
+                  </div>
+                </div>
+
+                {/* 4.7 CTAs */}
+                <div className="space-y-2 pt-2">
+                  <Button className="w-full" size="sm">
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    Generate GTM Strategy
+                    <ChevronRight className="ml-2 h-4 w-4" />
+                  </Button>
+                  <Button variant="outline" size="sm" className="w-full bg-transparent">
+                    <Download className="mr-2 h-4 w-4" />
+                    Export Summary
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            /* 5. Empty State */
+            <Card className="border-dashed">
+              <CardContent className="p-8 text-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted mx-auto mb-4">
+                  <Target className="h-7 w-7 text-muted-foreground" />
+                </div>
+                <h4 className="font-medium text-foreground mb-1">No GTM motion selected</h4>
+                <p className="text-sm text-muted-foreground">
+                  Choose a recommended motion on the left to preview an AI-generated GTM plan summary.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-8 border-t pt-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Bookmark className="h-5 w-5 text-primary" />
+          <h3 className="font-semibold text-foreground">Saved GTM Plans</h3>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {savedPlans.map((plan) => (
+            <Card key={plan.id} className="cursor-pointer hover:border-primary/50 transition-colors">
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <h4 className="font-medium text-foreground">{plan.name}</h4>
+                    <p className="text-xs text-muted-foreground">{plan.motion}</p>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-xs",
+                      plan.id === 1 && "bg-green-50 text-green-700 border-green-200",
+                      plan.id === 2 && "bg-blue-50 text-blue-700 border-blue-200",
+                      plan.id === 3 && "bg-amber-50 text-amber-700 border-amber-200",
+                    )}
+                  >
+                    {plan.id === 1 ? "Active" : plan.id === 2 ? "Draft" : "Archived"}
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground mb-3">{plan.date}</p>
+                <Button variant="outline" size="sm" className="w-full bg-transparent">
+                  Open Plan <ChevronRight className="ml-2 h-3 w-3" />
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       </div>
     </div>

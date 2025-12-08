@@ -6,7 +6,7 @@ export type CompanySize = "smb" | "mid" | "enterprise"
 export type GtmObjective = "pipeline" | "awareness" | "expansion" | "new_market"
 export type AcvBand = "low" | "mid" | "high"
 
-export type MotionId = "outbound_abm" | "plg" | "vertical_motion"
+export type MotionId = "outbound_abm" | "plg" | "vertical_motion" | "inbound_engine" | "customer_expansion"
 
 export interface SelectorInputs {
   companySize: CompanySize
@@ -64,43 +64,10 @@ const isAdjacentAcv = (a: AcvBand, b: AcvBand): boolean => {
   return false
 }
 
-// ---- Static motion configs ----
+// ---- Import library-driven motion configs ----
+import { MOTION_CONFIGS_FROM_LIBRARY } from "@/lib/gtm-motions"
 
-export const MOTION_CONFIGS: MotionConfig[] = [
-  {
-    id: "outbound_abm",
-    name: "Outbound ABM",
-    baseEffort: 70,
-    baseImpact: 85,
-    bestForSizes: ["mid", "enterprise"],
-    bestForObjectives: ["pipeline", "expansion"],
-    bestForAcv: ["mid", "high"],
-    bestForPersonas: ["VP Sales", "CRO", "RevOps"],
-    weightSignals: 0.7,
-  },
-  {
-    id: "plg",
-    name: "Product-Led Growth",
-    baseEffort: 65,
-    baseImpact: 90,
-    bestForSizes: ["smb", "mid"],
-    bestForObjectives: ["pipeline", "awareness"],
-    bestForAcv: ["low", "mid"],
-    bestForPersonas: ["VP Product", "Growth", "Marketing"],
-    weightSignals: 0.5,
-  },
-  {
-    id: "vertical_motion",
-    name: "Vertical-Specific Motion",
-    baseEffort: 60,
-    baseImpact: 80,
-    bestForSizes: ["mid", "enterprise"],
-    bestForObjectives: ["pipeline", "new_market"],
-    bestForAcv: ["mid", "high"],
-    bestForPersonas: ["VP Sales", "Industry GM"],
-    weightSignals: 0.6,
-  },
-]
+export const MOTION_CONFIGS: MotionConfig[] = MOTION_CONFIGS_FROM_LIBRARY
 
 // ---- Fit scoring helpers ----
 

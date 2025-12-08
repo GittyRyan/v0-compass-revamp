@@ -22,6 +22,23 @@ const steps = [
 export function GTMSetupTab() {
   const [currentStep, setCurrentStep] = useState(1)
 
+  const [companyName, setCompanyName] = useState("")
+  const [website, setWebsite] = useState("")
+  const [companyDescription, setCompanyDescription] = useState("")
+  const [allowAiAnalysis, setAllowAiAnalysis] = useState(false)
+  const [shareBenchmarks, setShareBenchmarks] = useState(false)
+  const [businessObjective, setBusinessObjective] = useState("")
+  const [gtmGoal, setGtmGoal] = useState("")
+  const [primaryOffering, setPrimaryOffering] = useState("")
+  const [keyDifferentiators, setKeyDifferentiators] = useState("")
+  const [targetIndustry, setTargetIndustry] = useState("")
+  const [targetGeography, setTargetGeography] = useState("")
+  const [companySize, setCompanySize] = useState("")
+  const [targetDepartments, setTargetDepartments] = useState("")
+  const [brandVoice, setBrandVoice] = useState("")
+  const [buyerPersonas, setBuyerPersonas] = useState("")
+  const [commonObjections, setCommonObjections] = useState("")
+
   return (
     <div className="space-y-6">
       {/* Stepper */}
@@ -71,11 +88,19 @@ export function GTMSetupTab() {
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
                       <Label>Company Name</Label>
-                      <Input placeholder="Enter company name" defaultValue="Acme Corp" />
+                      <Input
+                        placeholder="Enter company name"
+                        value={companyName}
+                        onChange={(e) => setCompanyName(e.target.value)}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label>Website</Label>
-                      <Input placeholder="https://example.com" defaultValue="https://acmecorp.com" />
+                      <Input
+                        placeholder="https://example.com"
+                        value={website}
+                        onChange={(e) => setWebsite(e.target.value)}
+                      />
                     </div>
                   </div>
                   <div className="space-y-2">
@@ -83,7 +108,8 @@ export function GTMSetupTab() {
                     <Textarea
                       placeholder="Describe your company..."
                       rows={3}
-                      defaultValue="Acme Corp is a leading provider of enterprise software solutions..."
+                      value={companyDescription}
+                      onChange={(e) => setCompanyDescription(e.target.value)}
                     />
                   </div>
                   <div className="space-y-4 pt-4 border-t">
@@ -95,14 +121,14 @@ export function GTMSetupTab() {
                           Enable AI to analyze your company data for recommendations
                         </p>
                       </div>
-                      <Switch defaultChecked />
+                      <Switch checked={allowAiAnalysis} onCheckedChange={setAllowAiAnalysis} />
                     </div>
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm font-medium">Share anonymized benchmarks</p>
                         <p className="text-xs text-muted-foreground">Contribute to industry benchmark data</p>
                       </div>
-                      <Switch />
+                      <Switch checked={shareBenchmarks} onCheckedChange={setShareBenchmarks} />
                     </div>
                   </div>
                 </>
@@ -112,9 +138,9 @@ export function GTMSetupTab() {
                 <>
                   <div className="space-y-2">
                     <Label>Primary Business Objective</Label>
-                    <Select defaultValue="growth">
+                    <Select value={businessObjective} onValueChange={setBusinessObjective}>
                       <SelectTrigger>
-                        <SelectValue />
+                        <SelectValue placeholder="Select objective" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="growth">Revenue Growth</SelectItem>
@@ -126,9 +152,9 @@ export function GTMSetupTab() {
                   </div>
                   <div className="space-y-2">
                     <Label>GTM Goal</Label>
-                    <Select defaultValue="pipeline">
+                    <Select value={gtmGoal} onValueChange={setGtmGoal}>
                       <SelectTrigger>
-                        <SelectValue />
+                        <SelectValue placeholder="Select goal" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="awareness">Generate Market Awareness</SelectItem>
@@ -143,7 +169,8 @@ export function GTMSetupTab() {
                     <Textarea
                       placeholder="Describe your primary product or service..."
                       rows={3}
-                      defaultValue="Enterprise CRM platform with AI-powered sales automation..."
+                      value={primaryOffering}
+                      onChange={(e) => setPrimaryOffering(e.target.value)}
                     />
                   </div>
                   <div className="space-y-2">
@@ -151,7 +178,8 @@ export function GTMSetupTab() {
                     <Textarea
                       placeholder="What makes your offering unique?"
                       rows={2}
-                      defaultValue="Native AI integration, industry-leading automation, 24/7 support"
+                      value={keyDifferentiators}
+                      onChange={(e) => setKeyDifferentiators(e.target.value)}
                     />
                   </div>
                 </>
@@ -162,9 +190,9 @@ export function GTMSetupTab() {
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
                       <Label>Target Industries</Label>
-                      <Select defaultValue="technology">
+                      <Select value={targetIndustry} onValueChange={setTargetIndustry}>
                         <SelectTrigger>
-                          <SelectValue />
+                          <SelectValue placeholder="Select industry" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="technology">Technology</SelectItem>
@@ -176,9 +204,9 @@ export function GTMSetupTab() {
                     </div>
                     <div className="space-y-2">
                       <Label>Target Geography</Label>
-                      <Select defaultValue="north-america">
+                      <Select value={targetGeography} onValueChange={setTargetGeography}>
                         <SelectTrigger>
-                          <SelectValue />
+                          <SelectValue placeholder="Select geography" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="north-america">North America</SelectItem>
@@ -192,9 +220,9 @@ export function GTMSetupTab() {
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
                       <Label>Company Size</Label>
-                      <Select defaultValue="mid-market">
+                      <Select value={companySize} onValueChange={setCompanySize}>
                         <SelectTrigger>
-                          <SelectValue />
+                          <SelectValue placeholder="Select size" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="smb">SMB (1-100)</SelectItem>
@@ -205,9 +233,9 @@ export function GTMSetupTab() {
                     </div>
                     <div className="space-y-2">
                       <Label>Target Departments</Label>
-                      <Select defaultValue="sales">
+                      <Select value={targetDepartments} onValueChange={setTargetDepartments}>
                         <SelectTrigger>
-                          <SelectValue />
+                          <SelectValue placeholder="Select department" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="sales">Sales</SelectItem>
@@ -225,9 +253,9 @@ export function GTMSetupTab() {
                 <>
                   <div className="space-y-2">
                     <Label>Brand Voice</Label>
-                    <Select defaultValue="professional">
+                    <Select value={brandVoice} onValueChange={setBrandVoice}>
                       <SelectTrigger>
-                        <SelectValue />
+                        <SelectValue placeholder="Select brand voice" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="professional">Professional & Authoritative</SelectItem>
@@ -242,7 +270,8 @@ export function GTMSetupTab() {
                     <Textarea
                       placeholder="Describe your ideal buyer personas..."
                       rows={3}
-                      defaultValue="VP of Sales seeking automation, CRO focused on pipeline efficiency, RevOps leaders managing tech stack..."
+                      value={buyerPersonas}
+                      onChange={(e) => setBuyerPersonas(e.target.value)}
                     />
                   </div>
                   <div className="space-y-2">
@@ -250,7 +279,8 @@ export function GTMSetupTab() {
                     <Textarea
                       placeholder="What barriers do prospects typically face?"
                       rows={2}
-                      defaultValue="Budget constraints, integration concerns, change management..."
+                      value={commonObjections}
+                      onChange={(e) => setCommonObjections(e.target.value)}
                     />
                   </div>
                 </>
@@ -284,7 +314,7 @@ export function GTMSetupTab() {
           </Card>
         </div>
 
-        {/* GTM Brief Preview */}
+        {/* GTM Brief Preview - shows current form values */}
         <div className="lg:col-span-1">
           <Card className="sticky top-6">
             <CardHeader>
@@ -293,35 +323,49 @@ export function GTMSetupTab() {
             <CardContent className="space-y-3 text-sm">
               <div>
                 <p className="text-xs text-muted-foreground">Company</p>
-                <p className="font-medium">Acme Corp</p>
+                <p className="font-medium">{companyName || "—"}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Primary Objective</p>
-                <p className="font-medium">Revenue Growth</p>
+                <p className="font-medium">
+                  {businessObjective
+                    ? businessObjective.replace("-", " ").replace(/\b\w/g, (l) => l.toUpperCase())
+                    : "—"}
+                </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">GTM Goal</p>
-                <p className="font-medium">Accelerate Pipeline</p>
+                <p className="font-medium">
+                  {gtmGoal ? gtmGoal.replace("-", " ").replace(/\b\w/g, (l) => l.toUpperCase()) : "—"}
+                </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Time Horizon</p>
-                <p className="font-medium">6 months</p>
+                <p className="font-medium">—</p>
               </div>
               <div className="pt-2 border-t">
                 <p className="text-xs text-muted-foreground">Target Industry</p>
-                <p className="font-medium">Technology / SaaS</p>
+                <p className="font-medium">
+                  {targetIndustry ? targetIndustry.replace("-", " ").replace(/\b\w/g, (l) => l.toUpperCase()) : "—"}
+                </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Geography</p>
-                <p className="font-medium">North America</p>
+                <p className="font-medium">
+                  {targetGeography ? targetGeography.replace("-", " ").replace(/\b\w/g, (l) => l.toUpperCase()) : "—"}
+                </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Company Size</p>
-                <p className="font-medium">Mid-Market (101-1000)</p>
+                <p className="font-medium">
+                  {companySize ? companySize.replace("-", " ").replace(/\b\w/g, (l) => l.toUpperCase()) : "—"}
+                </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Key Personas</p>
-                <p className="font-medium">VP Sales, CRO, RevOps</p>
+                <p className="font-medium">
+                  {buyerPersonas ? buyerPersonas.substring(0, 50) + (buyerPersonas.length > 50 ? "..." : "") : "—"}
+                </p>
               </div>
             </CardContent>
           </Card>

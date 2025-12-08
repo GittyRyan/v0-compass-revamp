@@ -2,10 +2,15 @@ import type React from "react"
 import { TopNavbar } from "./top-navbar"
 import { Sidebar } from "./sidebar"
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+interface AppShellProps {
+  children: React.ReactNode
+  selectedFlow?: "gtm-insight" | "market-report"
+}
+
+export function AppShell({ children, selectedFlow }: AppShellProps) {
   return (
     <div className="min-h-screen bg-background">
-      <TopNavbar />
+      <TopNavbar selectedFlow={selectedFlow} />
       <Sidebar />
       <main className="ml-64 pt-16">
         <div className="p-6">{children}</div>

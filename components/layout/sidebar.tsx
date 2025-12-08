@@ -3,21 +3,21 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { Compass, Radio, PlayCircle, Lightbulb, MessageSquare, Plug, ShieldCheck, Settings } from "lucide-react"
-
-const navItems = [
-  { name: "Compass", href: "/compass", icon: Compass },
-  { name: "Signals", href: "/signals", icon: Radio },
-  { name: "Plays", href: "/plays", icon: PlayCircle },
-  { name: "Insights", href: "/insights", icon: Lightbulb },
-  { name: "Assist", href: "/assist", icon: MessageSquare },
-  { name: "Integrations", href: "/integrations", icon: Plug },
-  { name: "Compliance", href: "/compliance", icon: ShieldCheck },
-  { name: "Admin", href: "/admin", icon: Settings },
-]
+import { Radio, PlayCircle, Lightbulb, MessageSquare, Plug, ShieldCheck, Settings, Compass } from "lucide-react"
 
 export function Sidebar() {
   const pathname = usePathname()
+
+  const navItems = [
+    { name: "Compass", href: "/compass", icon: Compass },
+    { name: "Signals", href: "/signals", icon: Radio },
+    { name: "Plays", href: "/plays", icon: PlayCircle },
+    { name: "Insights", href: "/insights", icon: Lightbulb },
+    { name: "Assist", href: "/assist", icon: MessageSquare },
+    { name: "Integrations", href: "/integrations", icon: Plug },
+    { name: "Compliance", href: "/compliance", icon: ShieldCheck },
+    { name: "Admin", href: "/admin", icon: Settings },
+  ]
 
   return (
     <aside className="fixed left-0 top-16 z-40 h-[calc(100vh-4rem)] w-64 border-r border-border bg-white">
