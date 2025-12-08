@@ -97,42 +97,56 @@ export function GTMSelectorTab() {
   const [selectedMotion, setSelectedMotion] = useState<MotionId | null>(null)
   const [expandedCard, setExpandedCard] = useState<MotionId | null>(null)
 
-  // Build selector inputs for scoring
-  const selectorInputs: SelectorInputs = {
-    companySize: mapCompanySizeToScoring(companySize),
-    primaryObjective: mapObjectiveToScoring(primaryObjective),
-    acvBand: mapAcvToScoring(acvBand),
-    personas: targetPersonas
+  const clampPercent = (value?: number) => Math.min(100, Math.max(0, value ?? 0))
+
+  const parsePersonas = (raw: string) =>
+    raw
       .split(",")
       .map((p) => p.trim())
-      .filter(Boolean),
-    timeHorizonMonths: mapTimeHorizonToScoring(timeHorizon),
-  }
+      .filter(Boolean)
 
-  // Compute scores for all motions
-  const motionScores = scoreAllMotions(selectorInputs)
-
-  const motionExplainers = MOTION_CONFIGS.reduce(
-    (acc, motion) => {
-      const scores = motionScores.find((s) => s.motionId === motion.id)
-      if (scores) {
-        acc[motion.id] = buildWhyRecommendation(motion, scores, selectorInputs)
-      }
-      return acc
-    },
-    {} as Record<string, string[]>,
+  const selectorInputs: SelectorInputs = useMemo(
+    () => ({
+      companySize: mapCompanySizeToScoring(companySize),
+      primaryObjective: mapObjectiveToScoring(primaryObjective),
+      acvBand: mapAcvToScoring(acvBand),
+      personas: parsePersonas(targetPersonas),
+      timeHorizonMonths: mapTimeHorizonToScoring(timeHorizon),
+    }),
+    [acvBand, companySize, primaryObjective, targetPersonas, timeHorizon],
   )
 
-  const motionScoreById = useMemo(() => {
-    return Object.fromEntries(motionScores.map((m) => [m.motionId, m]))
+  const motionScores = useMemo(() => scoreAllMotions(selectorInputs), [selectorInputs])
+
+  const scoresById = useMemo(() => {
+    return Object.fromEntries(motionScores.map((m) => [m.motionId, m])) as Record<
+      MotionId,
+      (typeof motionScores)[number]
+    >
   }, [motionScores])
 
-  const selectedMotionData = selectedMotion
-    ? {
-        ...motionScoreById[selectedMotion],
-        ...motionMetadata[selectedMotion],
-      }
-    : null
+  const explainersById = useMemo(() => {
+    return MOTION_CONFIGS.reduce(
+      (acc, motion) => {
+        const scores = scoresById[motion.id]
+        if (scores) {
+          acc[motion.id] = buildWhyRecommendation(motion, scores, selectorInputs)
+        }
+        return acc
+      },
+      {} as Record<MotionId, string[]>,
+    )
+  }, [scoresById, selectorInputs])
+
+  const selectedMotionScores = selectedMotion ? scoresById[selectedMotion] : undefined
+
+  const selectedMotionData =
+    selectedMotion && selectedMotionScores
+      ? {
+          ...selectedMotionScores,
+          ...motionMetadata[selectedMotion],
+        }
+      : null
 
   return (
     <div className="space-y-8">
@@ -381,8 +395,36 @@ export function GTMSelectorTab() {
 
           {/* GTM Motion Cards */}
           <div className="space-y-4">
-            {motionScores.map((score) => {
-              const metadata = motionMetadata[score.motionId]
+            {MOTION_CONFIGS.map((motion) => {
+              const score = scoresById[motion.id]
+              const metadata = motionMetadata[motion.id]
+              const reasons = explainersById[motion.id] ?? []
+              const effort = clampPercent(score?.effort)
+              const impact = clampPercent(score?.impact)
+              const matchPercent = clampPercent(score?.matchPercent)
+              const objectiveFit = clampPercent(score?.objectiveFit)
+              const sizeFit = clampPercent(score?.sizeFit)
+              const acvFit = clampPercent(score?.acvFit)
+              const personaFit = clampPercent(score?.personaFit)
+
+              if (!score) {
+                return (
+                  <Card key={motion.id} className="transition-all">
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
+                          {metadata.id}
+                        </div>
+                        <div>
+                          <h4 className="font-semibold text-foreground">{motion.name}</h4>
+                          <p className="text-xs text-muted-foreground">Unable to compute recommendation.</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
+              }
+
               return (
                 <Card
                   key={score.motionId}
@@ -406,14 +448,14 @@ export function GTMSelectorTab() {
                       <Badge
                         className={cn(
                           "text-xs font-semibold",
-                          score.matchPercent >= 90
+                          matchPercent >= 90
                             ? "bg-green-100 text-green-700"
-                            : score.matchPercent >= 80
+                            : matchPercent >= 80
                               ? "bg-blue-100 text-blue-700"
                               : "bg-amber-100 text-amber-700",
                         )}
                       >
-                        {score.matchPercent}% Match
+                        {matchPercent}% Match
                       </Badge>
                     </div>
 
@@ -423,20 +465,20 @@ export function GTMSelectorTab() {
                         <div className="flex-1 h-2 rounded-full bg-secondary overflow-hidden">
                           <div
                             className="h-full bg-amber-500 rounded-full transition-all duration-300"
-                            style={{ width: `${score.effort}%` }}
+                            style={{ width: `${effort}%` }}
                           />
                         </div>
-                        <span className="w-8 text-xs text-muted-foreground text-right">{score.effort}%</span>
+                        <span className="w-8 text-xs text-muted-foreground text-right">{effort}%</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="w-14 text-xs text-muted-foreground">Impact</span>
                         <div className="flex-1 h-2 rounded-full bg-secondary overflow-hidden">
                           <div
                             className="h-full bg-green-500 rounded-full transition-all duration-300"
-                            style={{ width: `${score.impact}%` }}
+                            style={{ width: `${impact}%` }}
                           />
                         </div>
-                        <span className="w-8 text-xs text-muted-foreground text-right">{score.impact}%</span>
+                        <span className="w-8 text-xs text-muted-foreground text-right">{impact}%</span>
                       </div>
                     </div>
 
@@ -475,7 +517,7 @@ export function GTMSelectorTab() {
                       <CollapsibleContent>
                         <div className="rounded-lg bg-accent/50 p-3 mb-3 text-sm text-foreground">
                           <ul className="space-y-2 mb-3">
-                            {(motionExplainers[score.motionId] ?? []).map((reason, idx) => (
+                            {reasons.map((reason, idx) => (
                               <li key={idx} className="flex items-start gap-2">
                                 <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
                                 <span>{reason}</span>
@@ -485,19 +527,19 @@ export function GTMSelectorTab() {
                           <div className="grid grid-cols-2 gap-2 text-xs border-t pt-2 mt-2">
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Objective Fit:</span>
-                              <span className="font-medium">{score.objectiveFit}%</span>
+                              <span className="font-medium">{objectiveFit}%</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Size Fit:</span>
-                              <span className="font-medium">{score.sizeFit}%</span>
+                              <span className="font-medium">{sizeFit}%</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">ACV Fit:</span>
-                              <span className="font-medium">{score.acvFit}%</span>
+                              <span className="font-medium">{acvFit}%</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Persona Fit:</span>
-                              <span className="font-medium">{score.personaFit}%</span>
+                              <span className="font-medium">{personaFit}%</span>
                             </div>
                           </div>
                         </div>
@@ -548,15 +590,17 @@ export function GTMSelectorTab() {
 
                   <div className="grid grid-cols-3 gap-3">
                     <div className="text-center p-3 rounded-lg bg-accent/50">
-                      <p className="text-2xl font-bold text-primary">{selectedMotionData.matchPercent}%</p>
+                      <p className="text-2xl font-bold text-primary">
+                        {clampPercent(selectedMotionData.matchPercent)}%
+                      </p>
                       <p className="text-xs text-muted-foreground">Match</p>
                     </div>
                     <div className="text-center p-3 rounded-lg bg-accent/50">
-                      <p className="text-2xl font-bold text-amber-600">{selectedMotionData.effort}%</p>
+                      <p className="text-2xl font-bold text-amber-600">{clampPercent(selectedMotionData.effort)}%</p>
                       <p className="text-xs text-muted-foreground">Effort</p>
                     </div>
                     <div className="text-center p-3 rounded-lg bg-accent/50">
-                      <p className="text-2xl font-bold text-green-600">{selectedMotionData.impact}%</p>
+                      <p className="text-2xl font-bold text-green-600">{clampPercent(selectedMotionData.impact)}%</p>
                       <p className="text-xs text-muted-foreground">Impact</p>
                     </div>
                   </div>
