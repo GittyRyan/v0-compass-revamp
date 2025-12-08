@@ -10,9 +10,9 @@ export type MotionId = "outbound_abm" | "plg" | "vertical_motion" | "inbound_eng
 
 export interface SelectorInputs {
   companySize: CompanySize
-  primaryObjective: GtmObjective
+  primaryObjective?: GtmObjective
   secondaryObjectives?: GtmObjective[]
-  acvBand: AcvBand
+  acvBand?: AcvBand
   personas: string[]
   timeHorizonMonths: 3 | 6 | 9 | 12
 }
@@ -108,9 +108,11 @@ function computePersonaFit(motion: MotionConfig, personas: string[]): number {
 // ---- Public scoring API ----
 
 export function scoreMotion(motion: MotionConfig, inputs: SelectorInputs): MotionScoreBreakdown {
-  const objectiveFit = computeObjectiveFit(motion, inputs.primaryObjective, inputs.secondaryObjectives)
+  const objectiveFit = inputs.primaryObjective
+    ? computeObjectiveFit(motion, inputs.primaryObjective, inputs.secondaryObjectives)
+    : 50 // neutral if not set
   const sizeFit = computeSizeFit(motion, inputs.companySize)
-  const acvFit = computeAcvFit(motion, inputs.acvBand)
+  const acvFit = inputs.acvBand ? computeAcvFit(motion, inputs.acvBand) : 50 // neutral if not set
   const personaFit = computePersonaFit(motion, inputs.personas)
 
   const fitScore = round(0.35 * objectiveFit + 0.25 * sizeFit + 0.25 * acvFit + 0.15 * personaFit)
@@ -149,7 +151,8 @@ export function scoreAllMotions(inputs: SelectorInputs): MotionScoreBreakdown[] 
 
 // ---- Mapping helpers for UI values ----
 
-export function mapObjectiveToScoring(value: string): GtmObjective {
+export function mapObjectiveToScoring(value: string): GtmObjective | undefined {
+  if (!value || value.trim() === "") return undefined
   const objectiveMap: Record<string, GtmObjective> = {
     "generate-awareness": "awareness",
     "create-demand": "pipeline",
@@ -163,17 +166,23 @@ export function mapObjectiveToScoring(value: string): GtmObjective {
     "customer-advocacy": "awareness",
     "increase-nrr": "expansion",
   }
-  return objectiveMap[value] || "pipeline"
+  return objectiveMap[value]
 }
 
-export function mapAcvToScoring(value: string): AcvBand {
+export function mapAcvToScoring(value: string): AcvBand | undefined {
+  if (!value || value.trim() === "") return undefined
   const acvMap: Record<string, AcvBand> = {
+    // First-class UI values (low/mid/high)
+    low: "low",
+    mid: "mid",
+    high: "high",
+    // Legacy keys for backward compatibility
     smb: "low",
     "mid-market": "mid",
     enterprise: "high",
     strategic: "high",
   }
-  return acvMap[value] || "mid"
+  return acvMap[value]
 }
 
 export function mapCompanySizeToScoring(value: string): CompanySize {

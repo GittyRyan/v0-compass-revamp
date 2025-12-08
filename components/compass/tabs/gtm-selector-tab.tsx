@@ -32,6 +32,7 @@ import {
 import { buildWhyRecommendation } from "@/lib/gtm-explanation"
 import { GTM_MOTION_LIBRARY, type GtmMotion } from "@/lib/gtm-motions"
 import {
+  AlertCircle,
   Bookmark,
   Check,
   ChevronDown,
@@ -97,7 +98,7 @@ const motionMetadata: Record<
     drivers: [
       "Existing customer relationships as foundation",
       "Usage data signals expansion opportunities",
-      "Lower CAC than new logo acquisition",
+      "Lower CAC than new.logo acquisition",
     ],
     socialProof: "~85% of revenue for mature SaaS comes from expansion.",
   },
@@ -155,10 +156,68 @@ const motionLibraryById: Record<MotionId, GtmMotion> = Object.fromEntries(
   GTM_MOTION_LIBRARY.map((m) => [m.id, m]),
 ) as Record<MotionId, GtmMotion>
 
-const savedPlans = [
-  { id: 1, name: "Q1 Enterprise Push", date: "Dec 15, 2024", motion: "Outbound ABM", isActive: true },
-  { id: 2, name: "SMB Expansion", date: "Dec 10, 2024", motion: "Product-Led Growth", isActive: false },
-  { id: 3, name: "Healthcare Vertical", date: "Dec 5, 2024", motion: "Vertical-Specific", isActive: false },
+type SavedPlan = {
+  id: number
+  name: string
+  motion: string
+  industry?: string
+  companySize?: string
+  region?: string
+  effort?: number
+  impact?: number
+  status: "active" | "draft" | "archived"
+  updatedAt: string
+}
+
+const savedPlans: SavedPlan[] = [
+  {
+    id: 1,
+    name: "Q1 Enterprise Push",
+    motion: "Outbound ABM",
+    industry: "Technology / SaaS",
+    companySize: "Enterprise",
+    region: "North America",
+    effort: 70,
+    impact: 90,
+    status: "active",
+    updatedAt: "Dec 15, 2024",
+  },
+  {
+    id: 2,
+    name: "SMB Expansion",
+    motion: "Product-Led Growth",
+    industry: "FinTech",
+    companySize: "SMB",
+    region: "EMEA",
+    effort: 45,
+    impact: 75,
+    status: "draft",
+    updatedAt: "Dec 10, 2024",
+  },
+  {
+    id: 3,
+    name: "Healthcare Vertical",
+    motion: "Vertical-Specific",
+    industry: "Healthcare",
+    companySize: "Mid-Market",
+    region: "North America",
+    effort: 60,
+    impact: 85,
+    status: "draft",
+    updatedAt: "Dec 5, 2024",
+  },
+  {
+    id: 4,
+    name: "2023 APAC Launch",
+    motion: "Inbound Demand Engine",
+    industry: "Manufacturing",
+    companySize: "Enterprise",
+    region: "APAC",
+    effort: 55,
+    impact: 70,
+    status: "archived",
+    updatedAt: "Nov 20, 2024",
+  },
 ]
 
 const TOP_N_MOTIONS = 3
@@ -199,6 +258,10 @@ export function GTMSelectorTab() {
       .map((p) => p.trim())
       .filter(Boolean)
 
+  const hasRequiredInputs = useMemo(() => {
+    return !!primaryObjective && !!acvBand
+  }, [primaryObjective, acvBand])
+
   const selectorInputs: SelectorInputs = useMemo(
     () => ({
       companySize: mapCompanySizeToScoring(companySize),
@@ -206,12 +269,14 @@ export function GTMSelectorTab() {
       acvBand: mapAcvToScoring(acvBand),
       personas: parsePersonas(targetPersonas),
       timeHorizonMonths: mapTimeHorizonToScoring(timeHorizon),
-      // that are not part of the SelectorInputs interface and are not used by scoreAllMotions()
     }),
     [acvBand, companySize, primaryObjective, targetPersonas, timeHorizon],
   )
 
-  const motionScores = useMemo(() => scoreAllMotions(selectorInputs), [selectorInputs])
+  const motionScores = useMemo(() => {
+    if (!hasRequiredInputs) return []
+    return scoreAllMotions(selectorInputs)
+  }, [selectorInputs, hasRequiredInputs])
 
   const sortedScores = useMemo(() => {
     return [...motionScores].sort((a, b) => b.matchPercent - a.matchPercent)
@@ -226,6 +291,7 @@ export function GTMSelectorTab() {
   }, [motionScores])
 
   const explainersById = useMemo(() => {
+    if (!hasRequiredInputs) return {} as Record<MotionId, string[]>
     return MOTION_CONFIGS.reduce(
       (acc, motion) => {
         const scores = scoresById[motion.id]
@@ -236,7 +302,7 @@ export function GTMSelectorTab() {
       },
       {} as Record<MotionId, string[]>,
     )
-  }, [scoresById, selectorInputs])
+  }, [scoresById, selectorInputs, hasRequiredInputs])
 
   const selectedMotionScores = selectedMotion ? scoresById[selectedMotion] : undefined
 
@@ -266,11 +332,11 @@ export function GTMSelectorTab() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Three Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column - Inputs */}
-        <div className="lg:col-span-3 space-y-4">
+        <div className="lg:col-span-3 space-y-3">
           <div className="flex items-center gap-2 mb-4">
             <Target className="h-5 w-5 text-primary" />
             <h3 className="font-semibold text-foreground">Inputs</h3>
@@ -594,178 +660,218 @@ export function GTMSelectorTab() {
             <h3 className="font-semibold text-foreground">Recommended GTM Motions</h3>
           </div>
 
-          <div className="space-y-4">
-            {recommendedScores.map((score, index) => {
-              const metadata = motionMetadata[score.motionId]
-              const libraryMotion = motionLibraryById[score.motionId]
-              const reasons = explainersById[score.motionId] ?? []
-              const effort = clampPercent(score.effort)
-              const impact = clampPercent(score.impact)
-              const matchPercent = clampPercent(score.matchPercent)
-              const objectiveFit = clampPercent(score.objectiveFit)
-              const sizeFit = clampPercent(score.sizeFit)
-              const acvFit = clampPercent(score.acvFit)
-              const personaFit = clampPercent(score.personaFit)
+          {!hasRequiredInputs ? (
+            <Card className="border-amber-200 bg-amber-50">
+              <CardContent className="p-6">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+                  <div className="space-y-2">
+                    <h4 className="font-semibold text-amber-800">Complete Required Inputs</h4>
+                    <p className="text-sm text-amber-700">
+                      Set <span className="font-medium">Primary GTM Objective</span> and{" "}
+                      <span className="font-medium">ACV Band</span> in the GTM Goals & Offering section to see
+                      personalized GTM recommendations.
+                    </p>
+                    <div className="flex gap-2 pt-2">
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "text-xs",
+                          primaryObjective ? "border-green-500 text-green-700" : "border-amber-500 text-amber-700",
+                        )}
+                      >
+                        {primaryObjective ? <Check className="h-3 w-3 mr-1" /> : null}
+                        Primary Objective {primaryObjective ? "Set" : "Required"}
+                      </Badge>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "text-xs",
+                          acvBand ? "border-green-500 text-green-700" : "border-amber-500 text-amber-700",
+                        )}
+                      >
+                        {acvBand ? <Check className="h-3 w-3 mr-1" /> : null}
+                        ACV Band {acvBand ? "Set" : "Required"}
+                      </Badge>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-4">
+              {recommendedScores.map((score, index) => {
+                const metadata = motionMetadata[score.motionId]
+                const libraryMotion = motionLibraryById[score.motionId]
+                const reasons = explainersById[score.motionId] ?? []
+                const effort = clampPercent(score.effort)
+                const impact = clampPercent(score.impact)
+                const matchPercent = clampPercent(score.matchPercent)
+                const objectiveFit = clampPercent(score.objectiveFit)
+                const sizeFit = clampPercent(score.sizeFit)
+                const acvFit = clampPercent(score.acvFit)
+                const personaFit = clampPercent(score.personaFit)
 
-              if (!metadata) {
-                return (
-                  <Card key={score.motionId} className="transition-all">
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-3 mb-2">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
-                          {index + 1}
+                if (!metadata) {
+                  return (
+                    <Card key={score.motionId} className="transition-all">
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-3 mb-2">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
+                            {index + 1}
+                          </div>
+                          <div>
+                            <h4 className="font-semibold text-foreground">{score.name}</h4>
+                            <p className="text-xs text-muted-foreground">Unable to compute recommendation.</p>
+                          </div>
                         </div>
-                        <div>
-                          <h4 className="font-semibold text-foreground">{score.name}</h4>
-                          <p className="text-xs text-muted-foreground">Unable to compute recommendation.</p>
+                      </CardContent>
+                    </Card>
+                  )
+                }
+
+                return (
+                  <Card
+                    key={score.motionId}
+                    className={cn("transition-all", selectedMotion === score.motionId && "ring-2 ring-primary")}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
+                            {index + 1}
+                          </div>
+                          <div>
+                            <h4 className="font-semibold text-foreground">{score.name}</h4>
+                            {selectedMotion === score.motionId && (
+                              <span className="inline-flex items-center gap-1 text-xs text-primary">
+                                <Check className="h-3 w-3" /> Selected
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <Badge
+                          className={cn(
+                            "text-xs font-semibold",
+                            matchPercent >= 90
+                              ? "bg-green-100 text-green-700"
+                              : matchPercent >= 80
+                                ? "bg-blue-100 text-blue-700"
+                                : "bg-amber-100 text-amber-700",
+                          )}
+                        >
+                          {matchPercent}% Match
+                        </Badge>
+                      </div>
+
+                      <div className="mb-4 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <span className="w-14 text-xs text-muted-foreground">Effort</span>
+                          <div className="flex-1 h-2 rounded-full bg-secondary overflow-hidden">
+                            <div
+                              className="h-full bg-amber-500 rounded-full transition-all duration-300"
+                              style={{ width: `${effort}%` }}
+                            />
+                          </div>
+                          <span className="w-8 text-xs text-muted-foreground text-right">{effort}%</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="w-14 text-xs text-muted-foreground">Impact</span>
+                          <div className="flex-1 h-2 rounded-full bg-secondary overflow-hidden">
+                            <div
+                              className="h-full bg-green-500 rounded-full transition-all duration-300"
+                              style={{ width: `${impact}%` }}
+                            />
+                          </div>
+                          <span className="w-8 text-xs text-muted-foreground text-right">{impact}%</span>
                         </div>
                       </div>
+
+                      {/* Key Drivers */}
+                      <div className="mb-3">
+                        <p className="text-xs font-medium text-muted-foreground mb-1.5">Key Drivers</p>
+                        <ul className="space-y-1">
+                          {metadata.drivers.map((driver, i) => (
+                            <li key={i} className="flex items-start gap-2 text-sm text-foreground">
+                              <Sparkles className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" />
+                              {driver}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Social Proof */}
+                      <p className="text-xs text-muted-foreground italic mb-3">{metadata.socialProof}</p>
+
+                      {/* Expandable Reasoning */}
+                      <Collapsible
+                        open={showWhyExpanded[score.motionId] ?? false}
+                        onOpenChange={(open) => setShowWhyExpanded((prev) => ({ ...prev, [score.motionId]: open }))}
+                      >
+                        <CollapsibleTrigger asChild>
+                          <Button variant="link" className="h-auto p-0 text-xs text-primary mb-3">
+                            Why this recommendation?
+                            <ChevronDown
+                              className={cn(
+                                "ml-1 h-3 w-3 transition-transform",
+                                showWhyExpanded[score.motionId] && "rotate-180",
+                              )}
+                            />
+                          </Button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="rounded-lg bg-accent/50 p-3 mb-3 text-sm text-foreground">
+                            <ul className="space-y-2 mb-3">
+                              {reasons.map((reason, idx) => (
+                                <li key={idx} className="flex items-start gap-2">
+                                  <ChevronRight className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                                  <span>{reason}</span>
+                                </li>
+                              ))}
+                            </ul>
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Objective Fit:</span>
+                                <span className="font-medium">{objectiveFit}%</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Size Fit:</span>
+                                <span className="font-medium">{sizeFit}%</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">ACV Fit:</span>
+                                <span className="font-medium">{acvFit}%</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Persona Fit:</span>
+                                <span className="font-medium">{personaFit}%</span>
+                              </div>
+                            </div>
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+
+                      {/* Select Button */}
+                      <Button
+                        variant={selectedMotion === score.motionId ? "default" : "outline"}
+                        size="sm"
+                        className="w-full"
+                        onClick={() => setSelectedMotion(score.motionId)}
+                      >
+                        {selectedMotion === score.motionId ? (
+                          <>
+                            <Check className="mr-2 h-4 w-4" /> Selected
+                          </>
+                        ) : (
+                          "Select This Motion"
+                        )}
+                      </Button>
                     </CardContent>
                   </Card>
                 )
-              }
-
-              return (
-                <Card
-                  key={score.motionId}
-                  className={cn("transition-all", selectedMotion === score.motionId && "ring-2 ring-primary")}
-                >
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
-                          {index + 1}
-                        </div>
-                        <div>
-                          <h4 className="font-semibold text-foreground">{score.name}</h4>
-                          {selectedMotion === score.motionId && (
-                            <span className="inline-flex items-center gap-1 text-xs text-primary">
-                              <Check className="h-3 w-3" /> Selected
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <Badge
-                        className={cn(
-                          "text-xs font-semibold",
-                          matchPercent >= 90
-                            ? "bg-green-100 text-green-700"
-                            : matchPercent >= 80
-                              ? "bg-blue-100 text-blue-700"
-                              : "bg-amber-100 text-amber-700",
-                        )}
-                      >
-                        {matchPercent}% Match
-                      </Badge>
-                    </div>
-
-                    <div className="mb-4 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <span className="w-14 text-xs text-muted-foreground">Effort</span>
-                        <div className="flex-1 h-2 rounded-full bg-secondary overflow-hidden">
-                          <div
-                            className="h-full bg-amber-500 rounded-full transition-all duration-300"
-                            style={{ width: `${effort}%` }}
-                          />
-                        </div>
-                        <span className="w-8 text-xs text-muted-foreground text-right">{effort}%</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="w-14 text-xs text-muted-foreground">Impact</span>
-                        <div className="flex-1 h-2 rounded-full bg-secondary overflow-hidden">
-                          <div
-                            className="h-full bg-green-500 rounded-full transition-all duration-300"
-                            style={{ width: `${impact}%` }}
-                          />
-                        </div>
-                        <span className="w-8 text-xs text-muted-foreground text-right">{impact}%</span>
-                      </div>
-                    </div>
-
-                    {/* Key Drivers */}
-                    <div className="mb-3">
-                      <p className="text-xs font-medium text-muted-foreground mb-1.5">Key Drivers</p>
-                      <ul className="space-y-1">
-                        {metadata.drivers.map((driver, i) => (
-                          <li key={i} className="flex items-start gap-2 text-sm text-foreground">
-                            <Sparkles className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" />
-                            {driver}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-
-                    {/* Social Proof */}
-                    <p className="text-xs text-muted-foreground italic mb-3">{metadata.socialProof}</p>
-
-                    {/* Expandable Reasoning */}
-                    <Collapsible
-                      open={showWhyExpanded[score.motionId] ?? false}
-                      onOpenChange={(open) => setShowWhyExpanded((prev) => ({ ...prev, [score.motionId]: open }))}
-                    >
-                      <CollapsibleTrigger asChild>
-                        <Button variant="link" className="h-auto p-0 text-xs text-primary mb-3">
-                          Why this recommendation?
-                          <ChevronDown
-                            className={cn(
-                              "ml-1 h-3 w-3 transition-transform",
-                              showWhyExpanded[score.motionId] && "rotate-180",
-                            )}
-                          />
-                        </Button>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent>
-                        <div className="rounded-lg bg-accent/50 p-3 mb-3 text-sm text-foreground">
-                          <ul className="space-y-2 mb-3">
-                            {reasons.map((reason, idx) => (
-                              <li key={idx} className="flex items-start gap-2">
-                                <ChevronRight className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                                <span>{reason}</span>
-                              </li>
-                            ))}
-                          </ul>
-                          <div className="grid grid-cols-2 gap-2 text-xs">
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Objective Fit:</span>
-                              <span className="font-medium">{objectiveFit}%</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Size Fit:</span>
-                              <span className="font-medium">{sizeFit}%</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">ACV Fit:</span>
-                              <span className="font-medium">{acvFit}%</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Persona Fit:</span>
-                              <span className="font-medium">{personaFit}%</span>
-                            </div>
-                          </div>
-                        </div>
-                      </CollapsibleContent>
-                    </Collapsible>
-
-                    {/* Select Button */}
-                    <Button
-                      variant={selectedMotion === score.motionId ? "default" : "outline"}
-                      size="sm"
-                      className="w-full"
-                      onClick={() => setSelectedMotion(score.motionId)}
-                    >
-                      {selectedMotion === score.motionId ? (
-                        <>
-                          <Check className="mr-2 h-4 w-4" /> Selected
-                        </>
-                      ) : (
-                        "Select This Motion"
-                      )}
-                    </Button>
-                  </CardContent>
-                </Card>
-              )
-            })}
-          </div>
+              })}
+            </div>
+          )}
         </div>
 
         <div className="lg:col-span-4 space-y-4">
@@ -774,7 +880,19 @@ export function GTMSelectorTab() {
             <h3 className="font-semibold text-foreground">Selected GTM Path</h3>
           </div>
 
-          {selectedMotion && selectedMotionScores ? (
+          {!hasRequiredInputs ? (
+            <Card className="border-dashed">
+              <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
+                  <AlertCircle className="h-6 w-6 text-muted-foreground" />
+                </div>
+                <h4 className="font-medium text-foreground mb-2">Complete Required Inputs</h4>
+                <p className="text-sm text-muted-foreground max-w-[200px]">
+                  Set Primary GTM Objective and ACV Band to preview an AI GTM plan.
+                </p>
+              </CardContent>
+            </Card>
+          ) : selectedMotion && selectedMotionScores ? (
             <Card className="border-primary/50">
               <CardContent className="p-5 space-y-5">
                 {/* 4.1 Header + Match Snapshot */}
@@ -1084,13 +1202,13 @@ export function GTMSelectorTab() {
           ) : (
             /* 5. Empty State */
             <Card className="border-dashed">
-              <CardContent className="p-8 text-center">
-                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted mx-auto mb-4">
-                  <Target className="h-7 w-7 text-muted-foreground" />
+              <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
+                  <Target className="h-6 w-6 text-muted-foreground" />
                 </div>
-                <h4 className="font-medium text-foreground mb-1">No GTM motion selected</h4>
-                <p className="text-sm text-muted-foreground">
-                  Choose a recommended motion on the left to preview an AI-generated GTM plan summary.
+                <h4 className="font-medium text-foreground mb-2">No Motion Selected</h4>
+                <p className="text-sm text-muted-foreground max-w-[200px]">
+                  Select a GTM motion from the recommendations to see details and generate a plan.
                 </p>
               </CardContent>
             </Card>
@@ -1105,23 +1223,65 @@ export function GTMSelectorTab() {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {savedPlans.map((plan) => (
-            <Card key={plan.id} className="cursor-pointer hover:border-primary/50 transition-colors">
+            <Card
+              key={plan.id}
+              className={cn(
+                "cursor-pointer hover:border-primary/50 transition-colors",
+                plan.status === "archived" && "opacity-70",
+              )}
+            >
               <CardContent className="p-4">
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <h4 className="font-medium text-foreground">{plan.name}</h4>
+                {/* Header row: Plan name + Status badge */}
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-medium text-foreground truncate">{plan.name}</h4>
                     <p className="text-xs text-muted-foreground">{plan.motion}</p>
                   </div>
-                  {plan.isActive && (
-                    <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
-                      Active
-                    </Badge>
-                  )}
+                  <Badge
+                    variant={plan.status === "active" ? "default" : "outline"}
+                    className={cn(
+                      "text-xs ml-2 shrink-0",
+                      plan.status === "active" && "bg-primary text-primary-foreground",
+                      plan.status === "draft" && "bg-transparent text-muted-foreground border-muted-foreground/50",
+                      plan.status === "archived" && "bg-muted text-muted-foreground border-muted",
+                    )}
+                  >
+                    {plan.status === "active" ? "Active" : plan.status === "draft" ? "Draft" : "Archived"}
+                  </Badge>
                 </div>
-                <p className="text-xs text-muted-foreground mb-3">{plan.date}</p>
-                <Button variant="outline" size="sm" className="w-full bg-transparent">
-                  Open Plan <ChevronRight className="ml-2 h-3 w-3" />
-                </Button>
+
+                {/* Segment summary line */}
+                <p className="text-xs text-muted-foreground mb-3 truncate">
+                  {plan.industry || "—"} · {plan.companySize || "—"} · {plan.region || "—"}
+                </p>
+
+                {/* Effort / Impact mini bars */}
+                {(plan.effort !== undefined || plan.impact !== undefined) && (
+                  <div className="space-y-1.5 mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground w-12">Effort</span>
+                      <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div className="h-full bg-amber-500 rounded-full" style={{ width: `${plan.effort ?? 0}%` }} />
+                      </div>
+                      <span className="text-xs text-muted-foreground w-8 text-right">{plan.effort ?? "—"}%</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground w-12">Impact</span>
+                      <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${plan.impact ?? 0}%` }} />
+                      </div>
+                      <span className="text-xs text-muted-foreground w-8 text-right">{plan.impact ?? "—"}%</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Footer: Updated date + Open Plan button */}
+                <div className="flex items-center justify-between pt-2 border-t">
+                  <span className="text-xs text-muted-foreground">Updated {plan.updatedAt}</span>
+                  <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">
+                    Open <ChevronRight className="ml-1 h-3 w-3" />
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}

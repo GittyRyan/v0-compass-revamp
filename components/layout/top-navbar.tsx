@@ -1,6 +1,7 @@
 import { Bell, ChevronDown, FileBarChart, TrendingUp } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import Image from "next/image"
 
 interface TopNavbarProps {
@@ -19,17 +20,26 @@ export function TopNavbar({ selectedFlow = "gtm-insight" }: TopNavbarProps) {
 
         {/* Center: Page Title with Flow Icon */}
         <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-3">
-          <div
-            className={`flex h-10 w-10 items-center justify-center rounded-xl ${
-              selectedFlow === "market-report" ? "bg-emerald-100" : "bg-blue-100"
-            }`}
-          >
-            {selectedFlow === "market-report" ? (
-              <TrendingUp className="h-5 w-5 text-emerald-600" />
-            ) : (
-              <FileBarChart className="h-5 w-5 text-blue-600" />
-            )}
-          </div>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div
+                  className={`flex h-10 w-10 items-center justify-center rounded-xl cursor-default ${
+                    selectedFlow === "market-report" ? "bg-emerald-100" : "bg-blue-100"
+                  }`}
+                >
+                  {selectedFlow === "market-report" ? (
+                    <TrendingUp className="h-5 w-5 text-emerald-600" />
+                  ) : (
+                    <FileBarChart className="h-5 w-5 text-blue-600" />
+                  )}
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{selectedFlow === "market-report" ? "Market Report" : "GTM Insight"}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <div className="text-left">
             <h1 className="text-lg font-semibold text-foreground">Compass</h1>
             <p className="text-xs text-muted-foreground">AI-guided GTM Strategy</p>
