@@ -40,11 +40,12 @@ import {
   Sparkles,
   Target,
   TrendingUp,
-  Users,
   Zap,
   BarChart3,
   Clock,
   Settings2,
+  Building2,
+  SlidersHorizontal,
 } from "lucide-react"
 
 const motionMetadata: Record<
@@ -155,27 +156,40 @@ const motionLibraryById: Record<MotionId, GtmMotion> = Object.fromEntries(
 ) as Record<MotionId, GtmMotion>
 
 const savedPlans = [
-  { id: 1, name: "Q1 Enterprise Push", date: "Dec 15, 2024", motion: "Outbound ABM" },
-  { id: 2, name: "SMB Expansion", date: "Dec 10, 2024", motion: "Product-Led Growth" },
-  { id: 3, name: "Healthcare Vertical", date: "Dec 5, 2024", motion: "Vertical-Specific" },
+  { id: 1, name: "Q1 Enterprise Push", date: "Dec 15, 2024", motion: "Outbound ABM", isActive: true },
+  { id: 2, name: "SMB Expansion", date: "Dec 10, 2024", motion: "Product-Led Growth", isActive: false },
+  { id: 3, name: "Healthcare Vertical", date: "Dec 5, 2024", motion: "Vertical-Specific", isActive: false },
 ]
 
 const TOP_N_MOTIONS = 3
 
 export function GTMSelectorTab() {
+  // Company Profile
   const [companySize, setCompanySize] = useState("mid-market")
   const [region, setRegion] = useState("north-america")
   const [industry, setIndustry] = useState("saas-tech")
+
+  // ICP Snapshot
+  const [targetIndustry, setTargetIndustry] = useState("")
+  const [targetCompanySize, setTargetCompanySize] = useState("")
+  const [targetDepartments, setTargetDepartments] = useState<string[]>([])
+  const [targetPersonas, setTargetPersonas] = useState("")
+
+  // GTM Goals & Offering
   const [primaryObjective, setPrimaryObjective] = useState("")
   const [timeHorizon, setTimeHorizon] = useState("6")
   const [acvBand, setAcvBand] = useState("")
   const [primaryOffering, setPrimaryOffering] = useState("")
-  const [targetPersonas, setTargetPersonas] = useState("VP Sales, CRO")
+
+  // Optional Enhancers
+  const [targetBuyerStage, setTargetBuyerStage] = useState("")
+  const [brandVoice, setBrandVoice] = useState("")
 
   const [selectedMotion, setSelectedMotion] = useState<MotionId | null>(null)
-  const [expandedCard, setExpandedCard] = useState<MotionId | null>(null)
-
-  const [executionMode, setExecutionMode] = useState<"conservative" | "standard" | "aggressive">("standard")
+  // Execution mode changed to guided/autonomous
+  const [executionMode, setExecutionMode] = useState<"guided" | "autonomous">("guided")
+  // New state to manage collapsible sections in the right-hand panel
+  const [showWhyExpanded, setShowWhyExpanded] = useState<Record<string, boolean>>({})
 
   const clampPercent = (value?: number) => Math.min(100, Math.max(0, value ?? 0))
 
@@ -192,6 +206,7 @@ export function GTMSelectorTab() {
       acvBand: mapAcvToScoring(acvBand),
       personas: parsePersonas(targetPersonas),
       timeHorizonMonths: mapTimeHorizonToScoring(timeHorizon),
+      // that are not part of the SelectorInputs interface and are not used by scoreAllMotions()
     }),
     [acvBand, companySize, primaryObjective, targetPersonas, timeHorizon],
   )
@@ -233,6 +248,23 @@ export function GTMSelectorTab() {
         }
       : null
 
+  // Department options for multi-select
+  const departmentOptions = [
+    "Sales",
+    "Marketing",
+    "RevOps",
+    "Customer Success",
+    "Product",
+    "Engineering",
+    "Finance",
+    "IT",
+  ]
+
+  // Function to toggle department selection
+  const toggleDepartment = (dept: string) => {
+    setTargetDepartments((prev) => (prev.includes(dept) ? prev.filter((d) => d !== dept) : [...prev, dept]))
+  }
+
   return (
     <div className="space-y-8">
       {/* Three Column Layout */}
@@ -244,14 +276,13 @@ export function GTMSelectorTab() {
             <h3 className="font-semibold text-foreground">Inputs</h3>
           </div>
 
-          {/* Company Profile */}
           <Collapsible defaultOpen>
             <Card>
               <CollapsibleTrigger asChild>
                 <CardHeader className="cursor-pointer py-3 px-4">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-sm font-medium flex items-center gap-2">
-                      <Users className="h-4 w-4 text-primary" />
+                      <Building2 className="h-4 w-4 text-primary" />
                       Company Profile
                     </CardTitle>
                     <ChevronDown className="h-4 w-4 text-muted-foreground" />
@@ -260,33 +291,6 @@ export function GTMSelectorTab() {
               </CollapsibleTrigger>
               <CollapsibleContent>
                 <CardContent className="pt-0 pb-4 px-4 space-y-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Company Size</Label>
-                    <Select value={companySize} onValueChange={setCompanySize}>
-                      <SelectTrigger className="h-9 text-sm">
-                        <SelectValue placeholder="Select size" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="smb">SMB</SelectItem>
-                        <SelectItem value="mid-market">Mid-Market</SelectItem>
-                        <SelectItem value="enterprise">Enterprise</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Region</Label>
-                    <Select value={region} onValueChange={setRegion}>
-                      <SelectTrigger className="h-9 text-sm">
-                        <SelectValue placeholder="Select region" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="north-america">North America</SelectItem>
-                        <SelectItem value="emea">EMEA</SelectItem>
-                        <SelectItem value="apac">APAC</SelectItem>
-                        <SelectItem value="latam">LATAM</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs">Industry</Label>
                     <Select value={industry} onValueChange={setIndustry}>
@@ -299,6 +303,36 @@ export function GTMSelectorTab() {
                         <SelectItem value="healthcare">Healthcare</SelectItem>
                         <SelectItem value="manufacturing">Manufacturing</SelectItem>
                         <SelectItem value="retail">Retail / E-commerce</SelectItem>
+                        <SelectItem value="professional-services">Professional Services</SelectItem>
+                        <SelectItem value="education">Education</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Company Size</Label>
+                    <Select value={companySize} onValueChange={setCompanySize}>
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue placeholder="Select size" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="smb">SMB (1-100)</SelectItem>
+                        <SelectItem value="mid-market">Mid-Market (101-1000)</SelectItem>
+                        <SelectItem value="enterprise">Enterprise (1000+)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Region / Target Geography</Label>
+                    <Select value={region} onValueChange={setRegion}>
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue placeholder="Select region" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="north-america">North America</SelectItem>
+                        <SelectItem value="emea">EMEA</SelectItem>
+                        <SelectItem value="apac">APAC</SelectItem>
+                        <SelectItem value="latam">LATAM</SelectItem>
+                        <SelectItem value="global">Global</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -307,7 +341,6 @@ export function GTMSelectorTab() {
             </Card>
           </Collapsible>
 
-          {/* ICP Snapshot */}
           <Collapsible defaultOpen>
             <Card>
               <CollapsibleTrigger asChild>
@@ -322,30 +355,70 @@ export function GTMSelectorTab() {
                 </CardHeader>
               </CollapsibleTrigger>
               <CollapsibleContent>
-                <CardContent className="p-4">
-                  <div className="rounded-lg bg-accent/50 p-3 space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Primary Persona</span>
-                      <span className="font-medium text-foreground">VP of Sales</span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Buying Committee</span>
-                      <span className="font-medium text-foreground">3-5 stakeholders</span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Decision Timeline</span>
-                      <span className="font-medium text-foreground">60-90 days</span>
+                <CardContent className="pt-0 pb-4 px-4 space-y-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Target Industry</Label>
+                    <Select value={targetIndustry} onValueChange={setTargetIndustry}>
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue placeholder="Select target industry" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="saas-tech">SaaS / Technology</SelectItem>
+                        <SelectItem value="financial-services">Financial Services</SelectItem>
+                        <SelectItem value="healthcare">Healthcare</SelectItem>
+                        <SelectItem value="manufacturing">Manufacturing</SelectItem>
+                        <SelectItem value="retail">Retail / E-commerce</SelectItem>
+                        <SelectItem value="professional-services">Professional Services</SelectItem>
+                        <SelectItem value="education">Education</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Target Company Size</Label>
+                    <Select value={targetCompanySize} onValueChange={setTargetCompanySize}>
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue placeholder="Select target size" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="smb">SMB (1-100)</SelectItem>
+                        <SelectItem value="mid-market">Mid-Market (101-1000)</SelectItem>
+                        <SelectItem value="enterprise">Enterprise (1000+)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Target Departments</Label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {departmentOptions.map((dept) => (
+                        <Badge
+                          key={dept}
+                          variant={targetDepartments.includes(dept) ? "default" : "outline"}
+                          className={cn(
+                            "cursor-pointer text-xs transition-colors",
+                            targetDepartments.includes(dept) ? "bg-primary text-primary-foreground" : "hover:bg-accent",
+                          )}
+                          onClick={() => toggleDepartment(dept)}
+                        >
+                          {dept}
+                        </Badge>
+                      ))}
                     </div>
                   </div>
-                  <Button variant="link" className="h-auto p-0 mt-2 text-xs text-primary">
-                    Edit in ICP Builder <ChevronRight className="ml-1 h-3 w-3" />
-                  </Button>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Target Personas *</Label>
+                    <Input
+                      placeholder="e.g., VP Sales, CRO, RevOps"
+                      className="h-9 text-sm"
+                      value={targetPersonas}
+                      onChange={(e) => setTargetPersonas(e.target.value)}
+                    />
+                    <p className="text-[10px] text-muted-foreground">Comma-separated list of personas</p>
+                  </div>
                 </CardContent>
               </CollapsibleContent>
             </Card>
           </Collapsible>
 
-          {/* GTM Goals & Offering */}
           <Collapsible defaultOpen>
             <Card>
               <CollapsibleTrigger asChild>
@@ -417,29 +490,34 @@ export function GTMSelectorTab() {
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs">Time Horizon</Label>
-                    <Select value={timeHorizon} onValueChange={setTimeHorizon}>
-                      <SelectTrigger className="h-9 text-sm">
-                        <SelectValue placeholder="Select timeframe" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="3">3 Months</SelectItem>
-                        <SelectItem value="6">6 Months</SelectItem>
-                        <SelectItem value="9">9 Months</SelectItem>
-                        <SelectItem value="12">12 Months</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <div className="flex rounded-lg border border-input bg-background p-0.5">
+                      {["3", "6", "9", "12"].map((months) => (
+                        <button
+                          key={months}
+                          type="button"
+                          onClick={() => setTimeHorizon(months)}
+                          className={cn(
+                            "flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
+                            timeHorizon === months
+                              ? "bg-primary text-primary-foreground"
+                              : "text-muted-foreground hover:text-foreground hover:bg-accent",
+                          )}
+                        >
+                          {months}mo
+                        </button>
+                      ))}
+                    </div>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs">Annual Deal Size (GTM Goal) *</Label>
+                    <Label className="text-xs">ACV Band</Label>
                     <Select value={acvBand} onValueChange={setAcvBand}>
                       <SelectTrigger className="h-9 text-sm">
-                        <SelectValue placeholder="Select band" />
+                        <SelectValue placeholder="Select ACV band" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="smb">$5K - $25K (SMB)</SelectItem>
-                        <SelectItem value="mid-market">$25K - $100K (Mid-Market)</SelectItem>
-                        <SelectItem value="enterprise">$100K - $500K (Enterprise)</SelectItem>
-                        <SelectItem value="strategic">$500K+ (Strategic)</SelectItem>
+                        <SelectItem value="low">Low ({"<"}$25K)</SelectItem>
+                        <SelectItem value="mid">Mid ($25K-$100K)</SelectItem>
+                        <SelectItem value="high">High ({">"}$100K)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -457,15 +535,14 @@ export function GTMSelectorTab() {
             </Card>
           </Collapsible>
 
-          {/* Target Audience */}
-          <Collapsible defaultOpen>
+          <Collapsible>
             <Card>
               <CollapsibleTrigger asChild>
                 <CardHeader className="cursor-pointer py-3 px-4">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-sm font-medium flex items-center gap-2">
-                      <Users className="h-4 w-4 text-primary" />
-                      Target Audience
+                      <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-muted-foreground">Optional Enhancers</span>
                     </CardTitle>
                     <ChevronDown className="h-4 w-4 text-muted-foreground" />
                   </div>
@@ -473,14 +550,36 @@ export function GTMSelectorTab() {
               </CollapsibleTrigger>
               <CollapsibleContent>
                 <CardContent className="pt-0 pb-4 px-4 space-y-3">
+                  <p className="text-[10px] text-muted-foreground mb-2">
+                    These fields are optional and do not affect scoring.
+                  </p>
                   <div className="space-y-1.5">
-                    <Label className="text-xs">Target Personas</Label>
-                    <Input
-                      placeholder="e.g., VP Sales, CRO, RevOps"
-                      className="h-9 text-sm"
-                      value={targetPersonas}
-                      onChange={(e) => setTargetPersonas(e.target.value)}
-                    />
+                    <Label className="text-xs">Target Buyer Stage</Label>
+                    <Select value={targetBuyerStage} onValueChange={setTargetBuyerStage}>
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue placeholder="Select buyer stage" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="awareness">Awareness</SelectItem>
+                        <SelectItem value="consideration">Consideration</SelectItem>
+                        <SelectItem value="decision">Decision</SelectItem>
+                        <SelectItem value="retention">Retention</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Brand Voice</Label>
+                    <Select value={brandVoice} onValueChange={setBrandVoice}>
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue placeholder="Select brand voice" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="professional">Professional</SelectItem>
+                        <SelectItem value="conversational">Conversational</SelectItem>
+                        <SelectItem value="technical">Technical</SelectItem>
+                        <SelectItem value="bold">Bold / Disruptive</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </CardContent>
               </CollapsibleContent>
@@ -601,8 +700,8 @@ export function GTMSelectorTab() {
 
                     {/* Expandable Reasoning */}
                     <Collapsible
-                      open={expandedCard === score.motionId}
-                      onOpenChange={() => setExpandedCard(expandedCard === score.motionId ? null : score.motionId)}
+                      open={showWhyExpanded[score.motionId] ?? false}
+                      onOpenChange={(open) => setShowWhyExpanded((prev) => ({ ...prev, [score.motionId]: open }))}
                     >
                       <CollapsibleTrigger asChild>
                         <Button variant="link" className="h-auto p-0 text-xs text-primary mb-3">
@@ -610,7 +709,7 @@ export function GTMSelectorTab() {
                           <ChevronDown
                             className={cn(
                               "ml-1 h-3 w-3 transition-transform",
-                              expandedCard === score.motionId && "rotate-180",
+                              showWhyExpanded[score.motionId] && "rotate-180",
                             )}
                           />
                         </Button>
@@ -708,23 +807,64 @@ export function GTMSelectorTab() {
                       <div className="text-foreground font-medium text-right">
                         {industry === "saas-tech"
                           ? "SaaS / Technology"
-                          : industry === "fintech"
-                            ? "FinTech"
+                          : industry === "financial-services"
+                            ? "Financial Services"
                             : industry === "healthcare"
                               ? "Healthcare"
-                              : industry === "ecommerce"
-                                ? "E-commerce"
-                                : industry}
+                              : industry === "manufacturing"
+                                ? "Manufacturing"
+                                : industry === "retail"
+                                  ? "Retail / E-commerce"
+                                  : industry === "professional-services"
+                                    ? "Professional Services"
+                                    : industry === "education"
+                                      ? "Education"
+                                      : industry}
                       </div>
                       <div className="text-muted-foreground">Company Size</div>
                       <div className="text-foreground font-medium text-right">
                         {companySize === "smb"
-                          ? "SMB"
+                          ? "SMB (1-100)"
                           : companySize === "mid-market"
-                            ? "Mid-Market"
+                            ? "Mid-Market (101-1000)"
                             : companySize === "enterprise"
-                              ? "Enterprise"
-                              : "Strategic"}
+                              ? "Enterprise (1000+)"
+                              : "—"}
+                      </div>
+                      <div className="text-muted-foreground">Target Industry</div>
+                      <div className="text-foreground font-medium text-right">
+                        {targetIndustry === "saas-tech"
+                          ? "SaaS / Technology"
+                          : targetIndustry === "financial-services"
+                            ? "Financial Services"
+                            : targetIndustry === "healthcare"
+                              ? "Healthcare"
+                              : targetIndustry === "manufacturing"
+                                ? "Manufacturing"
+                                : targetIndustry === "retail"
+                                  ? "Retail / E-commerce"
+                                  : targetIndustry === "professional-services"
+                                    ? "Professional Services"
+                                    : targetIndustry === "education"
+                                      ? "Education"
+                                      : targetIndustry || "—"}
+                      </div>
+                      <div className="text-muted-foreground">Target Company Size</div>
+                      <div className="text-foreground font-medium text-right">
+                        {targetCompanySize === "smb"
+                          ? "SMB (1-100)"
+                          : targetCompanySize === "mid-market"
+                            ? "Mid-Market (101-1000)"
+                            : targetCompanySize === "enterprise"
+                              ? "Enterprise (1000+)"
+                              : "—"}
+                      </div>
+                      <div className="text-muted-foreground">Target Departments</div>
+                      <div
+                        className="text-foreground font-medium text-right truncate"
+                        title={targetDepartments.join(", ")}
+                      >
+                        {targetDepartments.length > 0 ? targetDepartments.join(", ") : "—"}
                       </div>
                       <div className="text-muted-foreground">Key Personas</div>
                       <div className="text-foreground font-medium text-right truncate" title={targetPersonas}>
@@ -749,20 +889,28 @@ export function GTMSelectorTab() {
                               ? "APAC"
                               : region === "latam"
                                 ? "LATAM"
-                                : region}
+                                : region === "global"
+                                  ? "Global"
+                                  : region}
                       </div>
                       {acvBand && (
                         <>
                           <div className="text-muted-foreground">ACV Band</div>
                           <div className="text-foreground font-medium text-right">
-                            {acvBand === "5k-25k"
-                              ? "$5K–$25K"
-                              : acvBand === "25k-100k"
-                                ? "$25K–$100K"
-                                : acvBand === "100k-500k"
-                                  ? "$100K–$500K"
-                                  : "$500K+"}
+                            {acvBand === "low" ? "< $25K" : acvBand === "mid" ? "$25K–$100K" : "> $100K"}
                           </div>
+                        </>
+                      )}
+                      {targetBuyerStage && (
+                        <>
+                          <div className="text-muted-foreground">Target Buyer Stage</div>
+                          <div className="text-foreground font-medium text-right capitalize">{targetBuyerStage}</div>
+                        </>
+                      )}
+                      {brandVoice && (
+                        <>
+                          <div className="text-muted-foreground">Brand Voice</div>
+                          <div className="text-foreground font-medium text-right capitalize">{brandVoice}</div>
                         </>
                       )}
                     </div>
@@ -879,7 +1027,7 @@ export function GTMSelectorTab() {
                       Execution Mode
                     </Label>
                     <div className="flex rounded-lg border bg-muted/30 p-0.5">
-                      {(["conservative", "standard", "aggressive"] as const).map((mode) => (
+                      {(["guided", "autonomous"] as const).map((mode) => (
                         <button
                           key={mode}
                           onClick={() => setExecutionMode(mode)}
@@ -964,17 +1112,11 @@ export function GTMSelectorTab() {
                     <h4 className="font-medium text-foreground">{plan.name}</h4>
                     <p className="text-xs text-muted-foreground">{plan.motion}</p>
                   </div>
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "text-xs",
-                      plan.id === 1 && "bg-green-50 text-green-700 border-green-200",
-                      plan.id === 2 && "bg-blue-50 text-blue-700 border-blue-200",
-                      plan.id === 3 && "bg-amber-50 text-amber-700 border-amber-200",
-                    )}
-                  >
-                    {plan.id === 1 ? "Active" : plan.id === 2 ? "Draft" : "Archived"}
-                  </Badge>
+                  {plan.isActive && (
+                    <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+                      Active
+                    </Badge>
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground mb-3">{plan.date}</p>
                 <Button variant="outline" size="sm" className="w-full bg-transparent">
