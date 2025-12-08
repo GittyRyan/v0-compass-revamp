@@ -115,6 +115,8 @@ export function GTMSelectorTab() {
   const [selectedMotion, setSelectedMotion] = useState<number | null>(null)
   const [expandedCard, setExpandedCard] = useState<number | null>(null)
   const [selectedTimeline, setSelectedTimeline] = useState("6")
+  const [acvBand, setAcvBand] = useState("")
+  const [primaryOffering, setPrimaryOffering] = useState("")
 
   const selectedMotionData = gtmMotions.find((m) => m.id === selectedMotion)
 
@@ -239,13 +241,13 @@ export function GTMSelectorTab() {
               </Card>
             </Collapsible>
 
-            {/* GTM Goals */}
+            {/* GTM Goals & Offering */}
             <Collapsible defaultOpen>
               <Card>
                 <CollapsibleTrigger asChild>
                   <CardHeader className="cursor-pointer py-3 hover:bg-accent/50">
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-sm font-medium">GTM Goals</CardTitle>
+                      <CardTitle className="text-sm font-medium">GTM Goals & Offering</CardTitle>
                       <ChevronDown className="h-4 w-4 text-muted-foreground" />
                     </div>
                   </CardHeader>
@@ -253,10 +255,10 @@ export function GTMSelectorTab() {
                 <CollapsibleContent>
                   <CardContent className="space-y-3 pt-0">
                     <div className="space-y-1.5">
-                      <Label className="text-xs">Primary GTM Objective</Label>
-                      <Select defaultValue="generate-awareness">
+                      <Label className="text-xs">Primary GTM Objective *</Label>
+                      <Select>
                         <SelectTrigger className="h-8 text-sm">
-                          <SelectValue />
+                          <SelectValue placeholder="Select objective" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectGroup>
@@ -324,6 +326,31 @@ export function GTMSelectorTab() {
                           </button>
                         ))}
                       </div>
+                    </div>
+                    {/* Annual Deal Size (GTM Goal) */}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Annual Deal Size (GTM Goal) *</Label>
+                      <Select value={acvBand} onChange={(e) => setAcvBand(e.target.value)}>
+                        <SelectTrigger className="h-8 text-sm">
+                          <SelectValue placeholder="Select band" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="smb">$5K - $25K (SMB)</SelectItem>
+                          <SelectItem value="mid-market">$25K - $100K (Mid-Market)</SelectItem>
+                          <SelectItem value="enterprise">$100K - $500K (Enterprise)</SelectItem>
+                          <SelectItem value="strategic">$500K+ (Strategic)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {/* Primary Offering */}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Primary Offering *</Label>
+                      <Input
+                        className="h-8 text-sm"
+                        placeholder="Enter the offering for this GTM strategy"
+                        value={primaryOffering}
+                        onChange={(e) => setPrimaryOffering(e.target.value)}
+                      />
                     </div>
                   </CardContent>
                 </CollapsibleContent>
