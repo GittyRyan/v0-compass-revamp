@@ -19,12 +19,15 @@ import {
 import { cn } from "@/lib/utils"
 import {
   scoreAllMotions,
+  MOTION_CONFIGS,
   mapObjectiveToScoring,
   mapAcvToScoring,
   mapCompanySizeToScoring,
   mapTimeHorizonToScoring,
+  type SelectorInputs,
   type MotionId,
 } from "@/lib/gtm-scoring"
+import { buildWhyRecommendation } from "@/lib/gtm-explanation"
 import {
   Bookmark,
   Check,
@@ -86,23 +89,39 @@ export function GTMSelectorTab() {
   const [region, setRegion] = useState("north-america")
   const [industry, setIndustry] = useState("saas-tech")
   const [primaryObjective, setPrimaryObjective] = useState("")
-  const [selectedTimeline, setSelectedTimeline] = useState("6")
+  const [timeHorizon, setTimeHorizon] = useState("6")
   const [acvBand, setAcvBand] = useState("")
   const [primaryOffering, setPrimaryOffering] = useState("")
+  const [targetPersonas, setTargetPersonas] = useState("VP Sales, CRO")
 
   const [selectedMotion, setSelectedMotion] = useState<MotionId | null>(null)
   const [expandedCard, setExpandedCard] = useState<MotionId | null>(null)
 
-  const motionScores = useMemo(() => {
-    const inputs = {
-      companySize: mapCompanySizeToScoring(companySize),
-      primaryObjective: mapObjectiveToScoring(primaryObjective),
-      acvBand: mapAcvToScoring(acvBand || companySize), // fallback to company size if ACV not set
-      personas: ["VP Sales", "CRO"], // default personas
-      timeHorizonMonths: mapTimeHorizonToScoring(selectedTimeline),
-    }
-    return scoreAllMotions(inputs)
-  }, [companySize, primaryObjective, acvBand, selectedTimeline])
+  // Build selector inputs for scoring
+  const selectorInputs: SelectorInputs = {
+    companySize: mapCompanySizeToScoring(companySize),
+    primaryObjective: mapObjectiveToScoring(primaryObjective),
+    acvBand: mapAcvToScoring(acvBand),
+    personas: targetPersonas
+      .split(",")
+      .map((p) => p.trim())
+      .filter(Boolean),
+    timeHorizonMonths: mapTimeHorizonToScoring(timeHorizon),
+  }
+
+  // Compute scores for all motions
+  const motionScores = scoreAllMotions(selectorInputs)
+
+  const motionExplainers = MOTION_CONFIGS.reduce(
+    (acc, motion) => {
+      const scores = motionScores.find((s) => s.motionId === motion.id)
+      if (scores) {
+        acc[motion.id] = buildWhyRecommendation(motion, scores, selectorInputs)
+      }
+      return acc
+    },
+    {} as Record<string, string[]>,
+  )
 
   const motionScoreById = useMemo(() => {
     return Object.fromEntries(motionScores.map((m) => [m.motionId, m]))
@@ -302,10 +321,10 @@ export function GTMSelectorTab() {
                       {["3", "6", "9", "12"].map((months) => (
                         <button
                           key={months}
-                          onClick={() => setSelectedTimeline(months)}
+                          onClick={() => setTimeHorizon(months)}
                           className={cn(
                             "flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
-                            selectedTimeline === months
+                            timeHorizon === months
                               ? "bg-primary text-primary-foreground"
                               : "bg-secondary text-secondary-foreground hover:bg-secondary/80",
                           )}
@@ -336,6 +355,15 @@ export function GTMSelectorTab() {
                       placeholder="Enter offering for this GTM strategy"
                       value={primaryOffering}
                       onChange={(e) => setPrimaryOffering(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Target Personas</Label>
+                    <Input
+                      className="h-8 text-sm"
+                      placeholder="Enter target personas"
+                      value={targetPersonas}
+                      onChange={(e) => setTargetPersonas(e.target.value)}
                     />
                   </div>
                 </CardContent>
@@ -446,13 +474,15 @@ export function GTMSelectorTab() {
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                         <div className="rounded-lg bg-accent/50 p-3 mb-3 text-sm text-foreground">
-                          <p className="mb-2">
-                            Based on your ICP characteristics (
-                            {companySize === "smb" ? "SMB" : companySize === "mid-market" ? "Mid-Market" : "Enterprise"}{" "}
-                            in {region === "north-america" ? "North America" : region}) and selected objective, this
-                            motion demonstrates strong alignment.
-                          </p>
-                          <div className="grid grid-cols-2 gap-2 text-xs">
+                          <ul className="space-y-2 mb-3">
+                            {(motionExplainers[score.motionId] ?? []).map((reason, idx) => (
+                              <li key={idx} className="flex items-start gap-2">
+                                <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
+                                <span>{reason}</span>
+                              </li>
+                            ))}
+                          </ul>
+                          <div className="grid grid-cols-2 gap-2 text-xs border-t pt-2 mt-2">
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Objective Fit:</span>
                               <span className="font-medium">{score.objectiveFit}%</span>
@@ -549,10 +579,10 @@ export function GTMSelectorTab() {
                       {["3", "6", "9", "12"].map((months) => (
                         <button
                           key={months}
-                          onClick={() => setSelectedTimeline(months)}
+                          onClick={() => setTimeHorizon(months)}
                           className={cn(
                             "flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
-                            selectedTimeline === months
+                            timeHorizon === months
                               ? "bg-primary text-primary-foreground"
                               : "bg-secondary text-secondary-foreground hover:bg-secondary/80",
                           )}
