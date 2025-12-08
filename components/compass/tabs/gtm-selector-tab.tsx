@@ -6,7 +6,15 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import {
   ChevronDown,
@@ -245,16 +253,56 @@ export function GTMSelectorTab() {
                 <CollapsibleContent>
                   <CardContent className="space-y-3 pt-0">
                     <div className="space-y-1.5">
-                      <Label className="text-xs">Primary Goal</Label>
-                      <Select defaultValue="pipeline">
+                      <Label className="text-xs">Primary GTM Objective</Label>
+                      <Select defaultValue="generate-awareness">
                         <SelectTrigger className="h-8 text-sm">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="awareness">Generate Market Awareness</SelectItem>
-                          <SelectItem value="pipeline">Accelerate Pipeline</SelectItem>
-                          <SelectItem value="revenue">Drive Revenue Growth</SelectItem>
-                          <SelectItem value="expansion">Customer Expansion</SelectItem>
+                          <SelectGroup>
+                            <SelectLabel className="font-semibold text-foreground">Marketing Objectives</SelectLabel>
+                            <SelectItem value="generate-awareness" className="pl-4">
+                              Generate Market Awareness
+                            </SelectItem>
+                            <SelectItem value="create-demand" className="pl-4">
+                              Create Demand Pipeline
+                            </SelectItem>
+                            <SelectItem value="category-leadership" className="pl-4">
+                              Position for Category Leadership
+                            </SelectItem>
+                            <SelectItem value="new-offering" className="pl-4">
+                              Launch New Offering / Market Entry
+                            </SelectItem>
+                          </SelectGroup>
+                          <SelectGroup>
+                            <SelectLabel className="font-semibold text-foreground">Sales Objectives</SelectLabel>
+                            <SelectItem value="accelerate-pipeline" className="pl-4">
+                              Accelerate Pipeline Conversion
+                            </SelectItem>
+                            <SelectItem value="expand-accounts" className="pl-4">
+                              Expand Strategic Accounts
+                            </SelectItem>
+                            <SelectItem value="scale-revenue" className="pl-4">
+                              Scale Revenue Operations
+                            </SelectItem>
+                            <SelectItem value="optimize-pricing" className="pl-4">
+                              Optimize Pricing & Packaging Impact
+                            </SelectItem>
+                          </SelectGroup>
+                          <SelectGroup>
+                            <SelectLabel className="font-semibold text-foreground">
+                              Customer Success Objectives
+                            </SelectLabel>
+                            <SelectItem value="drive-adoption" className="pl-4">
+                              Drive Adoption & Retention
+                            </SelectItem>
+                            <SelectItem value="customer-advocacy" className="pl-4">
+                              Expand Customer Advocacy
+                            </SelectItem>
+                            <SelectItem value="increase-nrr" className="pl-4">
+                              Increase Net Revenue Retention (NRR)
+                            </SelectItem>
+                          </SelectGroup>
                         </SelectContent>
                       </Select>
                     </div>
