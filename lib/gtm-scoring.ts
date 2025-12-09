@@ -178,17 +178,26 @@ export function scoreAllMotions(inputs: SelectorInputs): MotionScoreBreakdown[] 
 export function mapObjectiveToScoring(value: string): GtmObjective | undefined {
   if (!value || value.trim() === "") return undefined
   const objectiveMap: Record<string, GtmObjective> = {
+    // Marketing Objectives
     "generate-awareness": "awareness",
     "create-demand": "pipeline",
     "category-leadership": "awareness",
     "new-offering": "new_market",
+    // Sales Objectives
     "accelerate-pipeline": "pipeline",
     "expand-accounts": "expansion",
     "scale-revenue": "pipeline",
     "optimize-pricing": "expansion",
+    // Customer Success Objectives
     "drive-adoption": "expansion",
     "customer-advocacy": "awareness",
     "increase-nrr": "expansion",
+    // Legacy values for backward compatibility
+    pipeline: "pipeline",
+    market_expansion: "new_market",
+    competitive_positioning: "awareness",
+    retention: "expansion",
+    brand_awareness: "awareness",
   }
   return objectiveMap[value]
 }

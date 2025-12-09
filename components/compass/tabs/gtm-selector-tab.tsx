@@ -8,7 +8,15 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   Dialog,
   DialogContent,
@@ -192,8 +200,8 @@ const TOP_N_MOTIONS = 3
 const DEFAULT_TENANT_ID = "default_tenant"
 
 const MOCK_COMPANY_PROFILE = {
-  companyName: "Acme Corp",
-  companyUrl: "https://acme.com",
+  companyName: "OmniGTM.ai",
+  companyUrl: "https://omnigtm.ai/",
 }
 
 const COUNTRY_OPTIONS = [
@@ -824,11 +832,26 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
                     <SelectValue placeholder="Select objective" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="pipeline">Generate Pipeline</SelectItem>
-                    <SelectItem value="market_expansion">Market Expansion</SelectItem>
-                    <SelectItem value="competitive_positioning">Competitive Positioning</SelectItem>
-                    <SelectItem value="retention">Customer Retention</SelectItem>
-                    <SelectItem value="brand_awareness">Brand Awareness</SelectItem>
+                    <SelectGroup>
+                      <SelectLabel className="font-semibold text-foreground">Marketing Objectives</SelectLabel>
+                      <SelectItem value="generate-awareness">Generate Market Awareness</SelectItem>
+                      <SelectItem value="create-demand">Create Demand Pipeline</SelectItem>
+                      <SelectItem value="category-leadership">Position for Category Leadership</SelectItem>
+                      <SelectItem value="new-offering">Launch New Offering / Market Entry</SelectItem>
+                    </SelectGroup>
+                    <SelectGroup>
+                      <SelectLabel className="font-semibold text-foreground">Sales Objectives</SelectLabel>
+                      <SelectItem value="accelerate-pipeline">Accelerate Pipeline Conversion</SelectItem>
+                      <SelectItem value="expand-accounts">Expand Strategic Accounts</SelectItem>
+                      <SelectItem value="scale-revenue">Scale Revenue Operations</SelectItem>
+                      <SelectItem value="optimize-pricing">Optimize Pricing & Packaging Impact</SelectItem>
+                    </SelectGroup>
+                    <SelectGroup>
+                      <SelectLabel className="font-semibold text-foreground">Customer Success Objectives</SelectLabel>
+                      <SelectItem value="drive-adoption">Drive Adoption & Retention</SelectItem>
+                      <SelectItem value="customer-advocacy">Expand Customer Advocacy</SelectItem>
+                      <SelectItem value="increase-nrr">Increase Net Revenue Retention (NRR)</SelectItem>
+                    </SelectGroup>
                   </SelectContent>
                 </Select>
               </div>
@@ -1045,20 +1068,30 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3 mb-3">
+                      <div className="space-y-2 mb-3">
                         <div className="space-y-1">
                           <div className="flex justify-between text-xs">
                             <span className="text-muted-foreground">Effort</span>
                             <span className="font-medium">{motion.effort}%</span>
                           </div>
-                          <Progress value={motion.effort} className="h-1.5" />
+                          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-orange-500 rounded-full transition-all"
+                              style={{ width: `${motion.effort}%` }}
+                            />
+                          </div>
                         </div>
                         <div className="space-y-1">
                           <div className="flex justify-between text-xs">
                             <span className="text-muted-foreground">Impact</span>
                             <span className="font-medium">{motion.impact}%</span>
                           </div>
-                          <Progress value={motion.impact} className="h-1.5" />
+                          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-emerald-500 rounded-full transition-all"
+                              style={{ width: `${motion.impact}%` }}
+                            />
+                          </div>
                         </div>
                       </div>
 
