@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect, useCallback } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -8,15 +8,23 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import {
   scoreAllMotions,
@@ -32,22 +40,46 @@ import {
 import { buildWhyRecommendation } from "@/lib/gtm-explanation"
 import { GTM_MOTION_LIBRARY, type GtmMotion } from "@/lib/gtm-motions"
 import {
+  loadPlanLibrary,
+  savePlanLibrary,
+  createPlan,
+  applyStatusChange,
+  deletePlan,
+  getActivePlan,
+  countByStatus,
+  formatPlanDate,
+  getStatusLabel,
+  getSeedPlanLibrary,
+  type GtmPlanLibrary,
+  type GtmPlan,
+  type PlanStatus,
+} from "@/lib/gtm-plans"
+import {
   AlertCircle,
+  Archive,
   Bookmark,
   Check,
   ChevronDown,
   ChevronRight,
   Download,
+  Eye,
+  MoreHorizontal,
+  Search,
   Sparkles,
+  Star,
   Target,
+  Trash2,
   TrendingUp,
+  Upload,
   Zap,
   BarChart3,
   Clock,
   Settings2,
   Building2,
   SlidersHorizontal,
+  Library,
 } from "lucide-react"
+import type { FlowType } from "@/app/compass/page"
 
 const motionMetadata: Record<
   MotionId,
@@ -156,77 +188,61 @@ const motionLibraryById: Record<MotionId, GtmMotion> = Object.fromEntries(
   GTM_MOTION_LIBRARY.map((m) => [m.id, m]),
 ) as Record<MotionId, GtmMotion>
 
-type SavedPlan = {
-  id: number
-  name: string
-  motion: string
-  industry?: string
-  companySize?: string
-  region?: string
-  effort?: number
-  impact?: number
-  status: "active" | "draft" | "archived"
-  updatedAt: string
+const TOP_N_MOTIONS = 3
+const DEFAULT_TENANT_ID = "default_tenant"
+
+const MOCK_COMPANY_PROFILE = {
+  companyName: "Acme Corp",
+  companyUrl: "https://acme.com",
 }
 
-const savedPlans: SavedPlan[] = [
-  {
-    id: 1,
-    name: "Q1 Enterprise Push",
-    motion: "Outbound ABM",
-    industry: "Technology / SaaS",
-    companySize: "Enterprise",
-    region: "North America",
-    effort: 70,
-    impact: 90,
-    status: "active",
-    updatedAt: "Dec 15, 2024",
-  },
-  {
-    id: 2,
-    name: "SMB Expansion",
-    motion: "Product-Led Growth",
-    industry: "FinTech",
-    companySize: "SMB",
-    region: "EMEA",
-    effort: 45,
-    impact: 75,
-    status: "draft",
-    updatedAt: "Dec 10, 2024",
-  },
-  {
-    id: 3,
-    name: "Healthcare Vertical",
-    motion: "Vertical-Specific",
-    industry: "Healthcare",
-    companySize: "Mid-Market",
-    region: "North America",
-    effort: 60,
-    impact: 85,
-    status: "draft",
-    updatedAt: "Dec 5, 2024",
-  },
-  {
-    id: 4,
-    name: "2023 APAC Launch",
-    motion: "Inbound Demand Engine",
-    industry: "Manufacturing",
-    companySize: "Enterprise",
-    region: "APAC",
-    effort: 55,
-    impact: 70,
-    status: "archived",
-    updatedAt: "Nov 20, 2024",
-  },
+const COUNTRY_OPTIONS = [
+  { value: "us", label: "United States" },
+  { value: "ca", label: "Canada" },
+  { value: "uk", label: "United Kingdom" },
+  { value: "de", label: "Germany" },
+  { value: "fr", label: "France" },
+  { value: "au", label: "Australia" },
+  { value: "jp", label: "Japan" },
+  { value: "sg", label: "Singapore" },
+  { value: "in", label: "India" },
+  { value: "br", label: "Brazil" },
+  { value: "mx", label: "Mexico" },
+  { value: "nl", label: "Netherlands" },
+  { value: "se", label: "Sweden" },
+  { value: "ch", label: "Switzerland" },
+  { value: "ae", label: "United Arab Emirates" },
+  { value: "il", label: "Israel" },
 ]
 
-const TOP_N_MOTIONS = 3
+const TARGET_MARKET_GEOGRAPHY_OPTIONS = [
+  { value: "global", label: "Global" },
+  { value: "north-america", label: "North America" },
+  { value: "emea", label: "EMEA" },
+  { value: "apac", label: "APAC" },
+  { value: "latam", label: "LATAM" },
+  { value: "europe", label: "Europe" },
+]
 
-export function GTMSelectorTab() {
+interface GTMSelectorTabProps {
+  onActivePlanChange?: (plan: GtmPlan | null) => void
+  flowType?: FlowType
+}
+
+export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }: GTMSelectorTabProps) {
+  const [companyName, setCompanyName] = useState(() =>
+    flowType === "gtm-insight" ? MOCK_COMPANY_PROFILE.companyName : "",
+  )
+  const [companyUrl, setCompanyUrl] = useState(() =>
+    flowType === "gtm-insight" ? MOCK_COMPANY_PROFILE.companyUrl : "",
+  )
+
   // Company Profile
   const [companySize, setCompanySize] = useState("mid-market")
-  const [region, setRegion] = useState("north-america")
+  const [hqCountry, setHqCountry] = useState("")
   const [industry, setIndustry] = useState("saas-tech")
+
+  const [targetMarketGeography, setTargetMarketGeography] = useState("")
 
   // ICP Snapshot
   const [targetIndustry, setTargetIndustry] = useState("")
@@ -245,10 +261,244 @@ export function GTMSelectorTab() {
   const [brandVoice, setBrandVoice] = useState("")
 
   const [selectedMotion, setSelectedMotion] = useState<MotionId | null>(null)
-  // Execution mode changed to guided/autonomous
   const [executionMode, setExecutionMode] = useState<"guided" | "autonomous">("guided")
-  // New state to manage collapsible sections in the right-hand panel
   const [showWhyExpanded, setShowWhyExpanded] = useState<Record<string, boolean>>({})
+
+  const [planLibrary, setPlanLibrary] = useState<GtmPlanLibrary>({ tenantId: DEFAULT_TENANT_ID, plans: [] })
+  const [statusFilter, setStatusFilter] = useState<"all" | PlanStatus>("all")
+  const [searchQuery, setSearchQuery] = useState("")
+
+  const [confirmModal, setConfirmModal] = useState<{
+    open: boolean
+    type: "switch-active" | "archive-overflow" | "capacity" | "delete" | "publish"
+    planId?: string
+    currentActivePlan?: GtmPlan | null
+    targetPlan?: GtmPlan
+    oldestArchivedPlan?: GtmPlan
+    errorStatus?: PlanStatus
+  }>({ open: false, type: "switch-active" })
+
+  useEffect(() => {
+    if (flowType === "gtm-insight") {
+      setCompanyName(MOCK_COMPANY_PROFILE.companyName)
+      setCompanyUrl(MOCK_COMPANY_PROFILE.companyUrl)
+    } else {
+      setCompanyName("")
+      setCompanyUrl("")
+    }
+  }, [flowType])
+
+  useEffect(() => {
+    let lib = loadPlanLibrary(DEFAULT_TENANT_ID)
+    // Seed with demo data if empty
+    if (lib.plans.length === 0) {
+      lib = getSeedPlanLibrary(DEFAULT_TENANT_ID)
+      savePlanLibrary(lib)
+    }
+    setPlanLibrary(lib)
+  }, [])
+
+  const activePlan = useMemo(() => getActivePlan(planLibrary), [planLibrary])
+
+  useEffect(() => {
+    onActivePlanChange?.(activePlan)
+  }, [activePlan, onActivePlanChange])
+
+  const planCounts = useMemo(() => countByStatus(planLibrary), [planLibrary])
+
+  const filteredPlans = useMemo(() => {
+    let plans = statusFilter === "all" ? planLibrary.plans : planLibrary.plans.filter((p) => p.status === statusFilter)
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase()
+      plans = plans.filter((p) => p.name.toLowerCase().includes(query) || p.motionName.toLowerCase().includes(query))
+    }
+    // Sort: active first, then by updatedAt desc
+    return plans.sort((a, b) => {
+      if (a.status === "active" && b.status !== "active") return -1
+      if (b.status === "active" && a.status !== "active") return 1
+      return b.updatedAt.localeCompare(a.updatedAt)
+    })
+  }, [planLibrary.plans, statusFilter, searchQuery])
+
+  const persistLibrary = useCallback((lib: GtmPlanLibrary) => {
+    setPlanLibrary(lib)
+    savePlanLibrary(lib)
+  }, [])
+
+  const handleSetActive = useCallback(
+    (plan: GtmPlan) => {
+      const currentActive = getActivePlan(planLibrary)
+      if (currentActive && currentActive.id !== plan.id) {
+        // Show confirmation modal
+        setConfirmModal({
+          open: true,
+          type: "switch-active",
+          planId: plan.id,
+          currentActivePlan: currentActive,
+          targetPlan: plan,
+        })
+      } else {
+        // No active plan, just activate
+        const result = applyStatusChange(planLibrary, plan.id, "active")
+        if (result.success) {
+          persistLibrary(result.data)
+        }
+      }
+    },
+    [planLibrary, persistLibrary],
+  )
+
+  const handlePublish = useCallback(
+    (plan: GtmPlan) => {
+      const result = applyStatusChange(planLibrary, plan.id, "saved")
+      if (result.success) {
+        persistLibrary(result.data)
+      } else if (result.error.type === "CAPACITY_EXCEEDED") {
+        setConfirmModal({
+          open: true,
+          type: "capacity",
+          planId: plan.id,
+          errorStatus: result.error.status,
+        })
+      }
+    },
+    [planLibrary, persistLibrary],
+  )
+
+  const handleArchive = useCallback(
+    (plan: GtmPlan) => {
+      const result = applyStatusChange(planLibrary, plan.id, "archived")
+      if (result.success) {
+        persistLibrary(result.data)
+      } else if (result.error.type === "ARCHIVE_OVERFLOW") {
+        setConfirmModal({
+          open: true,
+          type: "archive-overflow",
+          planId: plan.id,
+          oldestArchivedPlan: result.error.oldestPlan,
+        })
+      } else if (result.error.type === "CAPACITY_EXCEEDED") {
+        setConfirmModal({
+          open: true,
+          type: "capacity",
+          planId: plan.id,
+          errorStatus: result.error.status,
+        })
+      }
+    },
+    [planLibrary, persistLibrary],
+  )
+
+  const handleRestore = useCallback(
+    (plan: GtmPlan) => {
+      const result = applyStatusChange(planLibrary, plan.id, "saved")
+      if (result.success) {
+        persistLibrary(result.data)
+      } else if (result.error.type === "CAPACITY_EXCEEDED") {
+        setConfirmModal({
+          open: true,
+          type: "capacity",
+          planId: plan.id,
+          errorStatus: result.error.status,
+        })
+      }
+    },
+    [planLibrary, persistLibrary],
+  )
+
+  const handleDeletePlan = useCallback((plan: GtmPlan) => {
+    setConfirmModal({
+      open: true,
+      type: "delete",
+      planId: plan.id,
+      targetPlan: plan,
+    })
+  }, [])
+
+  const confirmModalAction = useCallback(() => {
+    const { type, planId, currentActivePlan, oldestArchivedPlan } = confirmModal
+
+    if (type === "switch-active" && planId && currentActivePlan) {
+      // Deactivate current, activate new
+      let lib = planLibrary
+      const deactivateResult = applyStatusChange(lib, currentActivePlan.id, "saved")
+      if (deactivateResult.success) {
+        lib = deactivateResult.data
+        const activateResult = applyStatusChange(lib, planId, "active")
+        if (activateResult.success) {
+          persistLibrary(activateResult.data)
+        }
+      }
+    } else if (type === "archive-overflow" && planId && oldestArchivedPlan) {
+      // Force archive with overflow deletion
+      const result = applyStatusChange(planLibrary, planId, "archived", { forceArchiveOverflow: true })
+      if (result.success) {
+        persistLibrary(result.data)
+      }
+    } else if (type === "delete" && planId) {
+      const result = deletePlan(planLibrary, planId)
+      if (result.success) {
+        persistLibrary(result.data)
+      }
+    }
+
+    setConfirmModal({ open: false, type: "switch-active" })
+  }, [confirmModal, planLibrary, persistLibrary])
+
+  const handleCreatePlan = useCallback(
+    (asDraft = false) => {
+      if (!selectedMotion) return
+
+      const motionConfig = MOTION_CONFIGS.find((m) => m.id === selectedMotion)
+      const motionMeta = motionLibraryById[selectedMotion]
+      if (!motionConfig || !motionMeta) return
+
+      const scores = scoresById[selectedMotion]
+      if (!scores) return
+
+      const newPlan: Omit<GtmPlan, "id" | "createdAt" | "updatedAt" | "tenantId"> = {
+        name: `${motionMeta.name} - ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })}`,
+        status: asDraft ? "draft" : "saved",
+        motionId: selectedMotion,
+        motionName: motionMeta.name,
+        segment: {
+          industry: industry || "Not specified",
+          companySize: companySize || "Not specified",
+          region: hqCountry || "Not specified", // Use hqCountry here
+        },
+        objective: primaryObjective || "pipeline",
+        acvBand: (mapAcvToScoring(acvBand) as "low" | "mid" | "high") || "mid",
+        personas: parsePersonas(targetPersonas),
+        effort: scores.effort,
+        impact: scores.impact,
+        matchPercent: scores.matchPercent,
+        timelineMonths: mapTimeHorizonToScoring(timeHorizon),
+      }
+
+      const result = createPlan(planLibrary, newPlan)
+      if (result.success) {
+        persistLibrary(result.data)
+      } else if (result.error.type === "CAPACITY_EXCEEDED") {
+        setConfirmModal({
+          open: true,
+          type: "capacity",
+          errorStatus: result.error.status,
+        })
+      }
+    },
+    [
+      selectedMotion,
+      planLibrary,
+      persistLibrary,
+      industry,
+      companySize,
+      hqCountry, // Use hqCountry here
+      primaryObjective,
+      acvBand,
+      targetPersonas,
+      timeHorizon,
+    ],
+  )
 
   const clampPercent = (value?: number) => Math.min(100, Math.max(0, value ?? 0))
 
@@ -261,37 +511,79 @@ export function GTMSelectorTab() {
   const hasRequiredInputs = useMemo(() => {
     const personas = parsePersonas(targetPersonas)
     return (
+      !!companyName &&
+      !!companyUrl &&
       !!industry &&
       !!companySize &&
-      !!region &&
+      !!hqCountry &&
+      !!targetMarketGeography &&
       !!primaryObjective &&
       !!acvBand &&
       !!targetCompanySize &&
       personas.length > 0
     )
-  }, [industry, companySize, region, primaryObjective, acvBand, targetCompanySize, targetPersonas])
+  }, [
+    companyName,
+    companyUrl,
+    industry,
+    companySize,
+    hqCountry,
+    targetMarketGeography,
+    primaryObjective,
+    acvBand,
+    targetCompanySize,
+    targetPersonas,
+  ])
 
   const missingInputs = useMemo(() => {
     const missing: string[] = []
+    if (!companyName) missing.push("Company")
+    if (!companyUrl) missing.push("Website")
     if (!industry) missing.push("Industry")
     if (!companySize) missing.push("Company Size")
-    if (!region) missing.push("Region")
+    if (!hqCountry) missing.push("HQ Country")
+    if (!targetMarketGeography) missing.push("Target Market Geography")
     if (!primaryObjective) missing.push("Primary GTM Objective")
     if (!acvBand) missing.push("ACV Band")
     if (!targetCompanySize) missing.push("Target Company Size")
     if (parsePersonas(targetPersonas).length === 0) missing.push("Target Personas")
     return missing
-  }, [industry, companySize, region, primaryObjective, acvBand, targetCompanySize, targetPersonas])
+  }, [
+    companyName,
+    companyUrl,
+    industry,
+    companySize,
+    hqCountry,
+    targetMarketGeography,
+    primaryObjective,
+    acvBand,
+    targetCompanySize,
+    targetPersonas,
+  ])
 
   const selectorInputs: SelectorInputs = useMemo(
     () => ({
+      companyName,
+      companyUrl,
+      hqCountry,
+      targetMarketGeography,
       companySize: mapCompanySizeToScoring(companySize),
       primaryObjective: mapObjectiveToScoring(primaryObjective),
       acvBand: mapAcvToScoring(acvBand),
       personas: parsePersonas(targetPersonas),
       timeHorizonMonths: mapTimeHorizonToScoring(timeHorizon),
     }),
-    [acvBand, companySize, primaryObjective, targetPersonas, timeHorizon],
+    [
+      companyName,
+      companyUrl,
+      hqCountry,
+      targetMarketGeography,
+      acvBand,
+      companySize,
+      primaryObjective,
+      targetPersonas,
+      timeHorizon,
+    ],
   )
 
   const motionScores = useMemo(() => {
@@ -299,17 +591,27 @@ export function GTMSelectorTab() {
     return scoreAllMotions(selectorInputs)
   }, [selectorInputs, hasRequiredInputs])
 
-  const sortedScores = useMemo(() => {
+  const scoresById = useMemo(
+    () =>
+      motionScores.reduce(
+        (acc, ms) => {
+          acc[ms.motionId] = ms
+          return acc
+        },
+        {} as Record<MotionId, MotionScoreBreakdown>,
+      ),
+    [motionScores],
+  )
+
+  const sortedMotions = useMemo(() => {
     return [...motionScores].sort((a, b) => b.matchPercent - a.matchPercent)
   }, [motionScores])
 
-  const recommendedScores = useMemo(() => {
-    return sortedScores.slice(0, TOP_N_MOTIONS)
-  }, [sortedScores])
+  const topMotions = sortedMotions.slice(0, TOP_N_MOTIONS)
 
-  const scoresById = useMemo(() => {
-    return Object.fromEntries(motionScores.map((m) => [m.motionId, m])) as Record<MotionId, MotionScoreBreakdown>
-  }, [motionScores])
+  const showRecommendations = hasRequiredInputs && topMotions.length > 0
+
+  const selectedMotionScores = selectedMotion ? scoresById[selectedMotion] : null
 
   const explainersById = useMemo(() => {
     if (!hasRequiredInputs) return {} as Record<MotionId, string[]>
@@ -324,16 +626,6 @@ export function GTMSelectorTab() {
       {} as Record<MotionId, string[]>,
     )
   }, [scoresById, selectorInputs, hasRequiredInputs])
-
-  const selectedMotionScores = selectedMotion ? scoresById[selectedMotion] : undefined
-
-  const selectedMotionData =
-    selectedMotion && selectedMotionScores
-      ? {
-          ...selectedMotionScores,
-          ...motionMetadata[selectedMotion],
-        }
-      : null
 
   // Department options for multi-select
   const departmentOptions = [
@@ -355,302 +647,251 @@ export function GTMSelectorTab() {
   return (
     <div className="space-y-6">
       {/* Three Column Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="grid grid-cols-12 gap-6">
         {/* Left Column - Inputs */}
-        <div className="lg:col-span-3 space-y-3">
-          <div className="flex items-center gap-2 mb-4">
-            <Target className="h-5 w-5 text-primary" />
-            <h3 className="font-semibold text-foreground">Inputs</h3>
-          </div>
+        <div className="col-span-12 lg:col-span-3 space-y-4">
+          <Card className="border-l-4 border-l-primary">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <Building2 className="h-4 w-4" />
+                Company Profile
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">
+                  Company <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  className="h-9 text-sm"
+                  placeholder="Enter company name"
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">
+                  Website <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  className="h-9 text-sm"
+                  placeholder="https://company.com"
+                  value={companyUrl}
+                  onChange={(e) => setCompanyUrl(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">
+                  Industry <span className="text-destructive">*</span>
+                </Label>
+                <Select value={industry} onValueChange={setIndustry}>
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder="Select industry" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="saas-tech">Technology / SaaS</SelectItem>
+                    <SelectItem value="fintech">FinTech</SelectItem>
+                    <SelectItem value="healthcare">Healthcare</SelectItem>
+                    <SelectItem value="manufacturing">Manufacturing</SelectItem>
+                    <SelectItem value="retail">Retail / E-commerce</SelectItem>
+                    <SelectItem value="professional-services">Professional Services</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">
+                  Company Size <span className="text-destructive">*</span>
+                </Label>
+                <Select value={companySize} onValueChange={setCompanySize}>
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder="Select size" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="startup">Startup (1-50)</SelectItem>
+                    <SelectItem value="smb">SMB (51-200)</SelectItem>
+                    <SelectItem value="mid-market">Mid-Market (201-1000)</SelectItem>
+                    <SelectItem value="enterprise">Enterprise (1000+)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">
+                  HQ Country <span className="text-destructive">*</span>
+                </Label>
+                <Select value={hqCountry} onValueChange={setHqCountry}>
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder="Select country" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {COUNTRY_OPTIONS.map((country) => (
+                      <SelectItem key={country.value} value={country.value}>
+                        {country.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
 
-          <Collapsible defaultOpen>
-            <Card>
-              <CollapsibleTrigger asChild>
-                <CardHeader className="cursor-pointer py-3 px-4">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-sm font-medium flex items-center gap-2">
-                      <Building2 className="h-4 w-4 text-primary" />
-                      Company Profile
-                    </CardTitle>
-                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                </CardHeader>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <CardContent className="pt-0 pb-4 px-4 space-y-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Industry</Label>
-                    <Select value={industry} onValueChange={setIndustry}>
-                      <SelectTrigger className="h-9 text-sm">
-                        <SelectValue placeholder="Select industry" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="saas-tech">SaaS / Technology</SelectItem>
-                        <SelectItem value="financial-services">Financial Services</SelectItem>
-                        <SelectItem value="healthcare">Healthcare</SelectItem>
-                        <SelectItem value="manufacturing">Manufacturing</SelectItem>
-                        <SelectItem value="retail">Retail / E-commerce</SelectItem>
-                        <SelectItem value="professional-services">Professional Services</SelectItem>
-                        <SelectItem value="education">Education</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Company Size</Label>
-                    <Select value={companySize} onValueChange={setCompanySize}>
-                      <SelectTrigger className="h-9 text-sm">
-                        <SelectValue placeholder="Select size" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="smb">SMB (1-100)</SelectItem>
-                        <SelectItem value="mid-market">Mid-Market (101-1000)</SelectItem>
-                        <SelectItem value="enterprise">Enterprise (1000+)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Region / Target Geography</Label>
-                    <Select value={region} onValueChange={setRegion}>
-                      <SelectTrigger className="h-9 text-sm">
-                        <SelectValue placeholder="Select region" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="north-america">North America</SelectItem>
-                        <SelectItem value="emea">EMEA</SelectItem>
-                        <SelectItem value="apac">APAC</SelectItem>
-                        <SelectItem value="latam">LATAM</SelectItem>
-                        <SelectItem value="global">Global</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </CardContent>
-              </CollapsibleContent>
-            </Card>
-          </Collapsible>
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <Target className="h-4 w-4" />
+                ICP Snapshot
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">
+                  Target Market Geography <span className="text-destructive">*</span>
+                </Label>
+                <Select value={targetMarketGeography} onValueChange={setTargetMarketGeography}>
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder="Select target geography" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TARGET_MARKET_GEOGRAPHY_OPTIONS.map((geo) => (
+                      <SelectItem key={geo.value} value={geo.value}>
+                        {geo.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Where your GTM initiative is aimed</p>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Target Industry</Label>
+                <Select value={targetIndustry} onValueChange={setTargetIndustry}>
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder="Select target industry" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="saas-tech">Technology / SaaS</SelectItem>
+                    <SelectItem value="fintech">FinTech</SelectItem>
+                    <SelectItem value="healthcare">Healthcare</SelectItem>
+                    <SelectItem value="manufacturing">Manufacturing</SelectItem>
+                    <SelectItem value="retail">Retail / E-commerce</SelectItem>
+                    <SelectItem value="professional-services">Professional Services</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">
+                  Target Company Size <span className="text-destructive">*</span>
+                </Label>
+                <Select value={targetCompanySize} onValueChange={setTargetCompanySize}>
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder="Select target size" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="startup">Startup (1-50)</SelectItem>
+                    <SelectItem value="smb">SMB (51-200)</SelectItem>
+                    <SelectItem value="mid-market">Mid-Market (201-1000)</SelectItem>
+                    <SelectItem value="enterprise">Enterprise (1000+)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">
+                  Target Personas <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  className="h-9 text-sm"
+                  placeholder="e.g. VP Sales, CRO, RevOps"
+                  value={targetPersonas}
+                  onChange={(e) => setTargetPersonas(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">Comma-separated list</p>
+              </div>
+            </CardContent>
+          </Card>
 
-          <Collapsible defaultOpen>
-            <Card>
-              <CollapsibleTrigger asChild>
-                <CardHeader className="cursor-pointer py-3 px-4">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-sm font-medium flex items-center gap-2">
-                      <Target className="h-4 w-4 text-primary" />
-                      ICP Snapshot
-                    </CardTitle>
-                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                </CardHeader>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <CardContent className="pt-0 pb-4 px-4 space-y-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Target Industry</Label>
-                    <Select value={targetIndustry} onValueChange={setTargetIndustry}>
-                      <SelectTrigger className="h-9 text-sm">
-                        <SelectValue placeholder="Select target industry" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="saas-tech">SaaS / Technology</SelectItem>
-                        <SelectItem value="financial-services">Financial Services</SelectItem>
-                        <SelectItem value="healthcare">Healthcare</SelectItem>
-                        <SelectItem value="manufacturing">Manufacturing</SelectItem>
-                        <SelectItem value="retail">Retail / E-commerce</SelectItem>
-                        <SelectItem value="professional-services">Professional Services</SelectItem>
-                        <SelectItem value="education">Education</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Target Company Size</Label>
-                    <Select value={targetCompanySize} onValueChange={setTargetCompanySize}>
-                      <SelectTrigger className="h-9 text-sm">
-                        <SelectValue placeholder="Select target size" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="smb">SMB (1-100)</SelectItem>
-                        <SelectItem value="mid-market">Mid-Market (101-1000)</SelectItem>
-                        <SelectItem value="enterprise">Enterprise (1000+)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Target Departments</Label>
-                    <div className="flex flex-wrap gap-1.5">
-                      {departmentOptions.map((dept) => (
-                        <Badge
-                          key={dept}
-                          variant={targetDepartments.includes(dept) ? "default" : "outline"}
-                          className={cn(
-                            "cursor-pointer text-xs transition-colors",
-                            targetDepartments.includes(dept) ? "bg-primary text-primary-foreground" : "hover:bg-accent",
-                          )}
-                          onClick={() => toggleDepartment(dept)}
-                        >
-                          {dept}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Target Personas *</Label>
-                    <Input
-                      placeholder="e.g., VP Sales, CRO, RevOps"
-                      className="h-9 text-sm"
-                      value={targetPersonas}
-                      onChange={(e) => setTargetPersonas(e.target.value)}
-                    />
-                    <p className="text-[10px] text-muted-foreground">Comma-separated list of personas</p>
-                  </div>
-                </CardContent>
-              </CollapsibleContent>
-            </Card>
-          </Collapsible>
-
-          <Collapsible defaultOpen>
-            <Card>
-              <CollapsibleTrigger asChild>
-                <CardHeader className="cursor-pointer py-3 px-4">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-sm font-medium flex items-center gap-2">
-                      <Zap className="h-4 w-4 text-primary" />
-                      GTM Goals & Offering
-                    </CardTitle>
-                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                </CardHeader>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <CardContent className="pt-0 pb-4 px-4 space-y-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Primary GTM Objective *</Label>
-                    <Select value={primaryObjective} onValueChange={setPrimaryObjective}>
-                      <SelectTrigger className="h-9 text-sm">
-                        <SelectValue placeholder="Select objective" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          <SelectLabel className="font-semibold text-foreground">Marketing Objectives</SelectLabel>
-                          <SelectItem value="generate-awareness" className="pl-4">
-                            Generate Market Awareness
-                          </SelectItem>
-                          <SelectItem value="create-demand" className="pl-4">
-                            Create Demand Pipeline
-                          </SelectItem>
-                          <SelectItem value="category-leadership" className="pl-4">
-                            Position for Category Leadership
-                          </SelectItem>
-                          <SelectItem value="new-offering" className="pl-4">
-                            Launch New Offering / Market Entry
-                          </SelectItem>
-                        </SelectGroup>
-                        <SelectGroup>
-                          <SelectLabel className="font-semibold text-foreground">Sales Objectives</SelectLabel>
-                          <SelectItem value="accelerate-pipeline" className="pl-4">
-                            Accelerate Pipeline Conversion
-                          </SelectItem>
-                          <SelectItem value="expand-accounts" className="pl-4">
-                            Expand Strategic Accounts
-                          </SelectItem>
-                          <SelectItem value="scale-revenue" className="pl-4">
-                            Scale Revenue Operations
-                          </SelectItem>
-                          <SelectItem value="optimize-pricing" className="pl-4">
-                            Optimize Pricing & Packaging Impact
-                          </SelectItem>
-                        </SelectGroup>
-                        <SelectGroup>
-                          <SelectLabel className="font-semibold text-foreground">
-                            Customer Success Objectives
-                          </SelectLabel>
-                          <SelectItem value="drive-adoption" className="pl-4">
-                            Drive Adoption & Retention
-                          </SelectItem>
-                          <SelectItem value="customer-advocacy" className="pl-4">
-                            Expand Customer Advocacy
-                          </SelectItem>
-                          <SelectItem value="increase-nrr" className="pl-4">
-                            Increase Net Revenue Retention (NRR)
-                          </SelectItem>
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Time Horizon</Label>
-                    <div className="flex rounded-lg border border-input bg-background p-0.5">
-                      {["3", "6", "9", "12"].map((months) => (
-                        <button
-                          key={months}
-                          type="button"
-                          onClick={() => setTimeHorizon(months)}
-                          className={cn(
-                            "flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
-                            timeHorizon === months
-                              ? "bg-primary text-primary-foreground"
-                              : "text-muted-foreground hover:text-foreground hover:bg-accent",
-                          )}
-                        >
-                          {months}mo
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">ACV Band</Label>
-                    <Select value={acvBand} onValueChange={setAcvBand}>
-                      <SelectTrigger className="h-9 text-sm">
-                        <SelectValue placeholder="Select ACV band" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="low">Low ({"<"}$25K)</SelectItem>
-                        <SelectItem value="mid">Mid ($25K-$100K)</SelectItem>
-                        <SelectItem value="high">High ({">"}$100K)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Primary Offering *</Label>
-                    <Input
-                      placeholder="Enter your primary offering"
-                      className="h-9 text-sm"
-                      value={primaryOffering}
-                      onChange={(e) => setPrimaryOffering(e.target.value)}
-                    />
-                  </div>
-                </CardContent>
-              </CollapsibleContent>
-            </Card>
-          </Collapsible>
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <TrendingUp className="h-4 w-4" />
+                GTM Goals
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">
+                  Primary GTM Objective <span className="text-destructive">*</span>
+                </Label>
+                <Select value={primaryObjective} onValueChange={setPrimaryObjective}>
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder="Select objective" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pipeline">Generate Pipeline</SelectItem>
+                    <SelectItem value="market_expansion">Market Expansion</SelectItem>
+                    <SelectItem value="competitive_positioning">Competitive Positioning</SelectItem>
+                    <SelectItem value="retention">Customer Retention</SelectItem>
+                    <SelectItem value="brand_awareness">Brand Awareness</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">
+                  ACV Band <span className="text-destructive">*</span>
+                </Label>
+                <Select value={acvBand} onValueChange={setAcvBand}>
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder="Select ACV band" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">Low (&lt;$10K)</SelectItem>
+                    <SelectItem value="mid">Mid ($10K-$100K)</SelectItem>
+                    <SelectItem value="high">High (&gt;$100K)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">
+                  Time Horizon <span className="text-destructive">*</span>
+                </Label>
+                <Select value={timeHorizon} onValueChange={setTimeHorizon}>
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder="Select timeline" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="3">3 months</SelectItem>
+                    <SelectItem value="6">6 months</SelectItem>
+                    <SelectItem value="9">9 months</SelectItem>
+                    <SelectItem value="12">12 months</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
 
           <Collapsible>
             <Card>
               <CollapsibleTrigger asChild>
-                <CardHeader className="cursor-pointer py-3 px-4">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-sm font-medium flex items-center gap-2">
-                      <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-muted-foreground">Optional Enhancers</span>
-                    </CardTitle>
+                <CardHeader className="pb-3 cursor-pointer hover:bg-muted/50 transition-colors">
+                  <CardTitle className="text-sm font-semibold flex items-center justify-between">
+                    <span className="flex items-center gap-2">
+                      <SlidersHorizontal className="h-4 w-4" />
+                      Optional Enhancers
+                    </span>
                     <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                  </div>
+                  </CardTitle>
                 </CardHeader>
               </CollapsibleTrigger>
               <CollapsibleContent>
-                <CardContent className="pt-0 pb-4 px-4 space-y-3">
-                  <p className="text-[10px] text-muted-foreground mb-2">
-                    These fields are optional and do not affect scoring.
-                  </p>
+                <CardContent className="space-y-3 pt-0">
                   <div className="space-y-1.5">
                     <Label className="text-xs">Target Buyer Stage</Label>
                     <Select value={targetBuyerStage} onValueChange={setTargetBuyerStage}>
                       <SelectTrigger className="h-9 text-sm">
-                        <SelectValue placeholder="Select buyer stage" />
+                        <SelectValue placeholder="Select stage" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="awareness">Awareness</SelectItem>
                         <SelectItem value="consideration">Consideration</SelectItem>
                         <SelectItem value="decision">Decision</SelectItem>
-                        <SelectItem value="retention">Retention</SelectItem>
+                        <SelectItem value="expansion">Expansion</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -658,13 +899,13 @@ export function GTMSelectorTab() {
                     <Label className="text-xs">Brand Voice</Label>
                     <Select value={brandVoice} onValueChange={setBrandVoice}>
                       <SelectTrigger className="h-9 text-sm">
-                        <SelectValue placeholder="Select brand voice" />
+                        <SelectValue placeholder="Select voice" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="professional">Professional</SelectItem>
                         <SelectItem value="conversational">Conversational</SelectItem>
                         <SelectItem value="technical">Technical</SelectItem>
-                        <SelectItem value="bold">Bold / Disruptive</SelectItem>
+                        <SelectItem value="bold">Bold / Challenger</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -672,13 +913,83 @@ export function GTMSelectorTab() {
               </CollapsibleContent>
             </Card>
           </Collapsible>
+
+          {/* Required Inputs Status */}
+          {!hasRequiredInputs && (
+            <Card className="border-amber-200 bg-amber-50/50">
+              <CardContent className="p-4">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-amber-800">Complete Required Inputs</p>
+                    <div className="flex flex-wrap gap-1">
+                      {[
+                        "Company",
+                        "Website",
+                        "Industry",
+                        "Company Size",
+                        "HQ Country",
+                        "Target Geo",
+                        "Objective",
+                        "ACV",
+                        "Target Size",
+                        "Personas",
+                      ].map((field) => {
+                        const isSet = !missingInputs.includes(
+                          field === "Objective"
+                            ? "Primary GTM Objective"
+                            : field === "ACV"
+                              ? "ACV Band"
+                              : field === "Target Size"
+                                ? "Target Company Size"
+                                : field === "Target Geo"
+                                  ? "Target Market Geography"
+                                  : field === "Company"
+                                    ? "Company"
+                                    : field === "Website"
+                                      ? "Website"
+                                      : field === "HQ Country"
+                                        ? "HQ Country"
+                                        : field === "Personas"
+                                          ? "Target Personas"
+                                          : field,
+                        )
+                        return (
+                          <Badge
+                            key={field}
+                            variant="outline"
+                            className={cn(
+                              "text-xs",
+                              isSet
+                                ? "bg-green-50 text-green-700 border-green-200"
+                                : "bg-amber-50 text-amber-700 border-amber-200",
+                            )}
+                          >
+                            {isSet && <Check className="h-3 w-3 mr-1" />}
+                            {field}
+                          </Badge>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
-        {/* Middle Column - GTM Motion Cards */}
-        <div className="lg:col-span-5">
-          <div className="flex items-center gap-2 mb-4">
-            <TrendingUp className="h-5 w-5 text-primary" />
-            <h3 className="font-semibold text-foreground">Recommended GTM Motions</h3>
+        {/* Middle Column – Recommendations */}
+        <div className="col-span-12 lg:col-span-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-foreground flex items-center gap-2">
+              <Zap className="h-5 w-5 text-primary" />
+              Recommended GTM Motions
+            </h3>
+            {showRecommendations && (
+              <Badge variant="secondary" className="text-xs">
+                Top {TOP_N_MOTIONS} of {motionScores.length}
+              </Badge>
+            )}
           </div>
 
           {!hasRequiredInputs ? (
@@ -689,179 +1000,116 @@ export function GTMSelectorTab() {
                 </div>
                 <h4 className="font-medium text-foreground mb-2">Waiting for Required Inputs</h4>
                 <p className="text-sm text-muted-foreground max-w-[220px]">
-                  Set Industry, Company Size, Region, Objective, ACV, Target Size, and Personas to preview an AI GTM
-                  plan.
+                  Set Company, Website, Industry, Company Size, HQ Country, Target Geography, Objective, ACV, Target
+                  Size, and Personas to see AI GTM recommendations.
                 </p>
               </CardContent>
             </Card>
           ) : (
-            <div className="space-y-4">
-              {recommendedScores.map((score, index) => {
-                const metadata = motionMetadata[score.motionId]
-                const libraryMotion = motionLibraryById[score.motionId]
-                const reasons = explainersById[score.motionId] ?? []
-                const effort = clampPercent(score.effort)
-                const impact = clampPercent(score.impact)
-                const matchPercent = clampPercent(score.matchPercent)
-                const objectiveFit = clampPercent(score.objectiveFit)
-                const sizeFit = clampPercent(score.sizeFit)
-                const acvFit = clampPercent(score.acvFit)
-                const personaFit = clampPercent(score.personaFit)
-
-                if (!metadata) {
-                  return (
-                    <Card key={score.motionId} className="transition-all">
-                      <CardContent className="p-4">
-                        <div className="flex items-center gap-3 mb-2">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
-                            {index + 1}
-                          </div>
-                          <div>
-                            <h4 className="font-semibold text-foreground">{score.name}</h4>
-                            <p className="text-xs text-muted-foreground">Unable to compute recommendation.</p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )
-                }
+            <div className="space-y-3">
+              {topMotions.map((motion, index) => {
+                const config = MOTION_CONFIGS.find((m) => m.id === motion.motionId)!
+                const meta = motionMetadata[motion.motionId]
+                const motionLib = motionLibraryById[motion.motionId]
+                const isSelected = selectedMotion === motion.motionId
+                const explanations = explainersById[motion.motionId] || []
 
                 return (
                   <Card
-                    key={score.motionId}
-                    className={cn("transition-all", selectedMotion === score.motionId && "ring-2 ring-primary")}
+                    key={motion.motionId}
+                    className={cn(
+                      "cursor-pointer transition-all",
+                      isSelected ? "border-primary ring-1 ring-primary/20" : "hover:border-primary/50",
+                    )}
+                    onClick={() => setSelectedMotion(motion.motionId)}
                   >
                     <CardContent className="p-4">
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex items-center gap-3">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
+                          <div
+                            className={cn(
+                              "flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold",
+                              index === 0 ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+                            )}
+                          >
                             {index + 1}
                           </div>
                           <div>
-                            <h4 className="font-semibold text-foreground">{score.name}</h4>
-                            {selectedMotion === score.motionId && (
-                              <span className="inline-flex items-center gap-1 text-xs text-primary">
-                                <Check className="h-3 w-3" /> Selected
-                              </span>
-                            )}
+                            <h4 className="font-semibold text-foreground">{motionLib?.name ?? config.id}</h4>
+                            <p className="text-xs text-muted-foreground">{motionLib?.description}</p>
                           </div>
                         </div>
-                        <Badge
-                          className={cn(
-                            "text-xs font-semibold",
-                            matchPercent >= 90
-                              ? "bg-green-100 text-green-700"
-                              : matchPercent >= 80
-                                ? "bg-blue-100 text-blue-700"
-                                : "bg-amber-100 text-amber-700",
-                          )}
-                        >
-                          {matchPercent}% Match
-                        </Badge>
-                      </div>
-
-                      <div className="mb-4 space-y-2">
-                        <div className="flex items-center gap-2">
-                          <span className="w-14 text-xs text-muted-foreground">Effort</span>
-                          <div className="flex-1 h-2 rounded-full bg-secondary overflow-hidden">
-                            <div
-                              className="h-full bg-amber-500 rounded-full transition-all duration-300"
-                              style={{ width: `${effort}%` }}
-                            />
-                          </div>
-                          <span className="w-8 text-xs text-muted-foreground text-right">{effort}%</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="w-14 text-xs text-muted-foreground">Impact</span>
-                          <div className="flex-1 h-2 rounded-full bg-secondary overflow-hidden">
-                            <div
-                              className="h-full bg-green-500 rounded-full transition-all duration-300"
-                              style={{ width: `${impact}%` }}
-                            />
-                          </div>
-                          <span className="w-8 text-xs text-muted-foreground text-right">{impact}%</span>
+                        <div className="text-right">
+                          <div className="text-lg font-bold text-primary">{motion.matchPercent}%</div>
+                          <div className="text-xs text-muted-foreground">Match</div>
                         </div>
                       </div>
 
-                      {/* Key Drivers */}
-                      <div className="mb-3">
-                        <p className="text-xs font-medium text-muted-foreground mb-1.5">Key Drivers</p>
-                        <ul className="space-y-1">
-                          {metadata.drivers.map((driver, i) => (
-                            <li key={i} className="flex items-start gap-2 text-sm text-foreground">
-                              <Sparkles className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" />
-                              {driver}
-                            </li>
-                          ))}
-                        </ul>
+                      <div className="grid grid-cols-2 gap-3 mb-3">
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-muted-foreground">Effort</span>
+                            <span className="font-medium">{motion.effort}%</span>
+                          </div>
+                          <Progress value={motion.effort} className="h-1.5" />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-muted-foreground">Impact</span>
+                            <span className="font-medium">{motion.impact}%</span>
+                          </div>
+                          <Progress value={motion.impact} className="h-1.5" />
+                        </div>
                       </div>
 
-                      {/* Social Proof */}
-                      <p className="text-xs text-muted-foreground italic mb-3">{metadata.socialProof}</p>
-
-                      {/* Expandable Reasoning */}
                       <Collapsible
-                        open={showWhyExpanded[score.motionId] ?? false}
-                        onOpenChange={(open) => setShowWhyExpanded((prev) => ({ ...prev, [score.motionId]: open }))}
+                        open={showWhyExpanded[motion.motionId]}
+                        onOpenChange={(open) => setShowWhyExpanded((prev) => ({ ...prev, [motion.motionId]: open }))}
                       >
                         <CollapsibleTrigger asChild>
-                          <Button variant="link" className="h-auto p-0 text-xs text-primary mb-3">
-                            Why this recommendation?
+                          <Button variant="ghost" size="sm" className="w-full justify-between h-8 px-2">
+                            <span className="text-xs font-medium">Why this motion?</span>
                             <ChevronDown
                               className={cn(
-                                "ml-1 h-3 w-3 transition-transform",
-                                showWhyExpanded[score.motionId] && "rotate-180",
+                                "h-4 w-4 transition-transform",
+                                showWhyExpanded[motion.motionId] && "rotate-180",
                               )}
                             />
                           </Button>
                         </CollapsibleTrigger>
                         <CollapsibleContent>
-                          <div className="rounded-lg bg-accent/50 p-3 mb-3 text-sm text-foreground">
-                            <ul className="space-y-2 mb-3">
-                              {reasons.map((reason, idx) => (
-                                <li key={idx} className="flex items-start gap-2">
-                                  <ChevronRight className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                                  <span>{reason}</span>
-                                </li>
-                              ))}
-                            </ul>
-                            <div className="grid grid-cols-2 gap-2 text-xs">
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Objective Fit:</span>
-                                <span className="font-medium">{objectiveFit}%</span>
+                          <div className="pt-2 space-y-1.5">
+                            {explanations.slice(0, 3).map((reason, i) => (
+                              <div key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
+                                <Check className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" />
+                                <span>{reason}</span>
                               </div>
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Size Fit:</span>
-                                <span className="font-medium">{sizeFit}%</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">ACV Fit:</span>
-                                <span className="font-medium">{acvFit}%</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Persona Fit:</span>
-                                <span className="font-medium">{personaFit}%</span>
-                              </div>
-                            </div>
+                            ))}
+                            <p className="text-xs text-muted-foreground/70 italic pt-1">{meta?.socialProof}</p>
                           </div>
                         </CollapsibleContent>
                       </Collapsible>
 
-                      {/* Select Button */}
-                      <Button
-                        variant={selectedMotion === score.motionId ? "default" : "outline"}
-                        size="sm"
-                        className="w-full"
-                        onClick={() => setSelectedMotion(score.motionId)}
-                      >
-                        {selectedMotion === score.motionId ? (
-                          <>
-                            <Check className="mr-2 h-4 w-4" /> Selected
-                          </>
-                        ) : (
-                          "Select This Motion"
-                        )}
-                      </Button>
+                      {showRecommendations && (
+                        <Button
+                          variant={isSelected ? "default" : "outline"}
+                          size="sm"
+                          className="w-full mt-3"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSelectedMotion(motion.motionId)
+                          }}
+                        >
+                          {isSelected ? (
+                            <>
+                              <Check className="mr-2 h-4 w-4" />
+                              Selected
+                            </>
+                          ) : (
+                            "Select This Motion"
+                          )}
+                        </Button>
+                      )}
                     </CardContent>
                   </Card>
                 )
@@ -870,11 +1118,12 @@ export function GTMSelectorTab() {
           )}
         </div>
 
-        <div className="lg:col-span-4 space-y-4">
-          <div className="flex items-center gap-2 mb-4">
-            <Zap className="h-5 w-5 text-primary" />
-            <h3 className="font-semibold text-foreground">Selected GTM Path</h3>
-          </div>
+        {/* Right Column – Selected GTM Path */}
+        <div className="col-span-12 lg:col-span-4 space-y-4">
+          <h3 className="font-semibold text-foreground flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-primary" />
+            Selected GTM Path
+          </h3>
 
           {!hasRequiredInputs ? (
             <Card className="border-dashed">
@@ -884,169 +1133,72 @@ export function GTMSelectorTab() {
                 </div>
                 <h4 className="font-medium text-foreground mb-2">Waiting for Required Inputs</h4>
                 <p className="text-sm text-muted-foreground max-w-[220px]">
-                  Set Industry, Company Size, Region, Objective, ACV, Target Size, and Personas to preview an AI GTM
-                  plan.
+                  Set Company, Website, Industry, Company Size, HQ Country, Target Geography, Objective, ACV, Target
+                  Size, and Personas to preview an AI GTM plan.
                 </p>
               </CardContent>
             </Card>
           ) : selectedMotion && selectedMotionScores ? (
-            <Card className="border-primary/50">
-              <CardContent className="p-5 space-y-5">
-                {/* 4.1 Header + Match Snapshot */}
-                <div className="space-y-3">
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-1">
-                      <h4 className="font-semibold text-lg text-foreground">
-                        {motionLibraryById[selectedMotion]?.name}
-                      </h4>
-                      <p className="text-xs text-muted-foreground">AI-selected GTM path for this plan</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge className="bg-green-100 text-green-700 font-semibold">
-                        {clampPercent(selectedMotionScores.matchPercent)}% Match
-                      </Badge>
-                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary">
-                        <Check className="h-3.5 w-3.5 text-white" />
-                      </div>
-                    </div>
+            <Card>
+              <CardContent className="p-4 space-y-4">
+                {/* Motion Header */}
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h4 className="font-semibold text-foreground">{motionLibraryById[selectedMotion]?.name}</h4>
+                    <p className="text-xs text-muted-foreground">{motionLibraryById[selectedMotion]?.description}</p>
                   </div>
-                  <p className="text-sm text-muted-foreground">{motionLibraryById[selectedMotion]?.description}</p>
+                  <div className="text-right">
+                    <div className="text-2xl font-bold text-primary">{selectedMotionScores.matchPercent}%</div>
+                    <div className="text-xs text-muted-foreground">Match Score</div>
+                  </div>
                 </div>
 
-                {/* 4.2 Plan Context (Inputs Summary) */}
+                {/* Plan Context */}
                 <div className="space-y-2">
                   <h5 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Plan Context</h5>
-                  <div className="bg-muted/50 rounded-lg p-3">
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                      <div className="text-muted-foreground">Primary Industry</div>
-                      <div className="text-foreground font-medium text-right">
-                        {industry === "saas-tech"
-                          ? "SaaS / Technology"
-                          : industry === "financial-services"
-                            ? "Financial Services"
-                            : industry === "healthcare"
-                              ? "Healthcare"
-                              : industry === "manufacturing"
-                                ? "Manufacturing"
-                                : industry === "retail"
-                                  ? "Retail / E-commerce"
-                                  : industry === "professional-services"
-                                    ? "Professional Services"
-                                    : industry === "education"
-                                      ? "Education"
-                                      : industry}
-                      </div>
-                      <div className="text-muted-foreground">Company Size</div>
-                      <div className="text-foreground font-medium text-right">
-                        {companySize === "smb"
-                          ? "SMB (1-100)"
-                          : companySize === "mid-market"
-                            ? "Mid-Market (101-1000)"
-                            : companySize === "enterprise"
-                              ? "Enterprise (1000+)"
-                              : "—"}
-                      </div>
-                      <div className="text-muted-foreground">Target Industry</div>
-                      <div className="text-foreground font-medium text-right">
-                        {targetIndustry === "saas-tech"
-                          ? "SaaS / Technology"
-                          : targetIndustry === "financial-services"
-                            ? "Financial Services"
-                            : targetIndustry === "healthcare"
-                              ? "Healthcare"
-                              : targetIndustry === "manufacturing"
-                                ? "Manufacturing"
-                                : targetIndustry === "retail"
-                                  ? "Retail / E-commerce"
-                                  : targetIndustry === "professional-services"
-                                    ? "Professional Services"
-                                    : targetIndustry === "education"
-                                      ? "Education"
-                                      : targetIndustry || "—"}
-                      </div>
-                      <div className="text-muted-foreground">Target Company Size</div>
-                      <div className="text-foreground font-medium text-right">
-                        {targetCompanySize === "smb"
-                          ? "SMB (1-100)"
-                          : targetCompanySize === "mid-market"
-                            ? "Mid-Market (101-1000)"
-                            : targetCompanySize === "enterprise"
-                              ? "Enterprise (1000+)"
-                              : "—"}
-                      </div>
-                      <div className="text-muted-foreground">Target Departments</div>
-                      <div
-                        className="text-foreground font-medium text-right truncate"
-                        title={targetDepartments.join(", ")}
-                      >
-                        {targetDepartments.length > 0 ? targetDepartments.join(", ") : "—"}
-                      </div>
-                      <div className="text-muted-foreground">Key Personas</div>
-                      <div className="text-foreground font-medium text-right truncate" title={targetPersonas}>
-                        {targetPersonas || "—"}
-                      </div>
-                      <div className="text-muted-foreground">Primary Objective</div>
-                      <div className="text-foreground font-medium text-right truncate">
-                        {primaryObjective
-                          ? primaryObjective
-                              .split("-")
-                              .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-                              .join(" ")
-                          : "—"}
-                      </div>
-                      <div className="text-muted-foreground">Region</div>
-                      <div className="text-foreground font-medium text-right">
-                        {region === "north-america"
-                          ? "North America"
-                          : region === "emea"
-                            ? "EMEA"
-                            : region === "apac"
-                              ? "APAC"
-                              : region === "latam"
-                                ? "LATAM"
-                                : region === "global"
-                                  ? "Global"
-                                  : region}
-                      </div>
-                      {acvBand && (
-                        <>
-                          <div className="text-muted-foreground">ACV Band</div>
-                          <div className="text-foreground font-medium text-right">
-                            {acvBand === "low" ? "< $25K" : acvBand === "mid" ? "$25K–$100K" : "> $100K"}
-                          </div>
-                        </>
-                      )}
-                      {targetBuyerStage && (
-                        <>
-                          <div className="text-muted-foreground">Target Buyer Stage</div>
-                          <div className="text-foreground font-medium text-right capitalize">{targetBuyerStage}</div>
-                        </>
-                      )}
-                      {brandVoice && (
-                        <>
-                          <div className="text-muted-foreground">Brand Voice</div>
-                          <div className="text-foreground font-medium text-right capitalize">{brandVoice}</div>
-                        </>
-                      )}
-                    </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    <Badge variant="secondary" className="text-xs">
+                      {industry || "Industry"}
+                    </Badge>
+                    <Badge variant="secondary" className="text-xs">
+                      {companySize || "Size"}
+                    </Badge>
+                    <Badge variant="secondary" className="text-xs">
+                      {hqCountry || "HQ"} {/* Use hqCountry */}
+                    </Badge>
+                    <Badge variant="secondary" className="text-xs">
+                      {targetMarketGeography || "Target Geo"} {/* Use targetMarketGeography */}
+                    </Badge>
+                    <Badge variant="secondary" className="text-xs">
+                      {parsePersonas(targetPersonas).length} Personas
+                    </Badge>
+                    <Badge variant="secondary" className="text-xs">
+                      {primaryObjective || "Objective"}
+                    </Badge>
+                    <Badge variant="secondary" className="text-xs">
+                      ACV: {acvBand || "—"}
+                    </Badge>
                   </div>
                 </div>
 
-                {/* 4.3 AI Fit & Rationale */}
-                <div className="space-y-3">
+                {/* Why Recommended */}
+                <div className="space-y-2">
                   <h5 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                    Why this GTM path?
+                    Why Recommended
                   </h5>
                   <ul className="space-y-1.5">
-                    {(explainersById[selectedMotion] ?? []).slice(0, 4).map((bullet, i) => (
-                      <li key={i} className="flex items-start gap-2 text-sm text-foreground">
-                        <Sparkles className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" />
-                        <span>{bullet}</span>
+                    {(explainersById[selectedMotion] || []).slice(0, 4).map((reason, i) => (
+                      <li key={i} className="flex items-start gap-2 text-xs text-foreground">
+                        <Check className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" />
+                        <span>{reason}</span>
                       </li>
                     ))}
                   </ul>
+                </div>
 
-                  {/* Fit Breakdown */}
+                {/* Fit Breakdown */}
+                <div className="space-y-2">
+                  <h5 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Fit Breakdown</h5>
                   <div className="grid grid-cols-2 gap-3 pt-2">
                     <div className="space-y-1">
                       <div className="flex justify-between text-xs">
@@ -1079,7 +1231,7 @@ export function GTMSelectorTab() {
                   </div>
                 </div>
 
-                {/* 4.4 Expected Outcomes */}
+                {/* Expected Outcomes */}
                 <div className="space-y-2">
                   <h5 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                     Expected Outcomes
@@ -1105,13 +1257,11 @@ export function GTMSelectorTab() {
                   </p>
                 </div>
 
-                {/* 4.5 Timeline & Scenario Controls */}
+                {/* Timeline & Execution */}
                 <div className="space-y-3">
                   <h5 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                     Timeline & Execution
                   </h5>
-
-                  {/* Timeline Selector */}
                   <div className="space-y-1.5">
                     <Label className="text-xs flex items-center gap-1.5">
                       <Clock className="h-3.5 w-3.5" />
@@ -1134,8 +1284,6 @@ export function GTMSelectorTab() {
                       ))}
                     </div>
                   </div>
-
-                  {/* Execution Mode */}
                   <div className="space-y-1.5">
                     <Label className="text-xs flex items-center gap-1.5">
                       <Settings2 className="h-3.5 w-3.5" />
@@ -1160,7 +1308,7 @@ export function GTMSelectorTab() {
                   </div>
                 </div>
 
-                {/* 4.6 AI GTM Plan Preview */}
+                {/* AI GTM Plan Preview */}
                 <div className="space-y-2">
                   <h5 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                     AI GTM Plan Preview
@@ -1182,14 +1330,22 @@ export function GTMSelectorTab() {
                   </div>
                 </div>
 
-                {/* 4.7 CTAs */}
                 <div className="space-y-2 pt-2">
-                  <Button className="w-full" size="sm">
+                  <Button className="w-full" size="sm" onClick={() => handleCreatePlan(false)}>
                     <Sparkles className="mr-2 h-4 w-4" />
-                    Generate GTM Strategy
+                    Save as Published Plan
                     <ChevronRight className="ml-2 h-4 w-4" />
                   </Button>
-                  <Button variant="outline" size="sm" className="w-full bg-transparent">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full bg-transparent"
+                    onClick={() => handleCreatePlan(true)}
+                  >
+                    <Bookmark className="mr-2 h-4 w-4" />
+                    Save as Draft
+                  </Button>
+                  <Button variant="ghost" size="sm" className="w-full">
                     <Download className="mr-2 h-4 w-4" />
                     Export Summary
                   </Button>
@@ -1197,7 +1353,6 @@ export function GTMSelectorTab() {
               </CardContent>
             </Card>
           ) : (
-            /* 5. Empty State */
             <Card className="border-dashed">
               <CardContent className="flex flex-col items-center justify-center py-12 text-center">
                 <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
@@ -1213,77 +1368,381 @@ export function GTMSelectorTab() {
         </div>
       </div>
 
-      <div className="mt-8 border-t pt-6">
-        <div className="flex items-center gap-2 mb-4">
-          <Bookmark className="h-5 w-5 text-primary" />
-          <h3 className="font-semibold text-foreground">Saved GTM Plans</h3>
+      <div className="mt-8 border-t pt-6" data-plan-library>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="font-semibold text-foreground flex items-center gap-2">
+              <Library className="h-5 w-5 text-primary" />
+              GTM Plan Library
+            </h3>
+            <p className="text-sm text-muted-foreground mt-1">
+              Manage your Draft, Published, Archived, and Active GTM plans.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="text-xs">
+              {planCounts.active} Active
+            </Badge>
+            <Badge variant="outline" className="text-xs">
+              {planCounts.saved} Published
+            </Badge>
+            <Badge variant="outline" className="text-xs">
+              {planCounts.draft} Drafts
+            </Badge>
+          </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {savedPlans.map((plan) => (
-            <Card
-              key={plan.id}
-              className={cn(
-                "cursor-pointer hover:border-primary/50 transition-colors",
-                plan.status === "archived" && "opacity-70",
-              )}
-            >
-              <CardContent className="p-4">
-                {/* Header row: Plan name + Status badge */}
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-medium text-foreground truncate">{plan.name}</h4>
-                    <p className="text-xs text-muted-foreground">{plan.motion}</p>
-                  </div>
-                  <Badge
-                    variant={plan.status === "active" ? "default" : "outline"}
-                    className={cn(
-                      "text-xs ml-2 shrink-0",
-                      plan.status === "active" && "bg-primary text-primary-foreground",
-                      plan.status === "draft" && "bg-transparent text-muted-foreground border-muted-foreground/50",
-                      plan.status === "archived" && "bg-muted text-muted-foreground border-muted",
-                    )}
-                  >
-                    {plan.status === "active" ? "Active" : plan.status === "draft" ? "Draft" : "Archived"}
-                  </Badge>
-                </div>
 
-                {/* Segment summary line */}
-                <p className="text-xs text-muted-foreground mb-3 truncate">
-                  {plan.industry || "—"} · {plan.companySize || "—"} · {plan.region || "—"}
-                </p>
-
-                {/* Effort / Impact mini bars */}
-                {(plan.effort !== undefined || plan.impact !== undefined) && (
-                  <div className="space-y-1.5 mb-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground w-12">Effort</span>
-                      <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-                        <div className="h-full bg-amber-500 rounded-full" style={{ width: `${plan.effort ?? 0}%` }} />
-                      </div>
-                      <span className="text-xs text-muted-foreground w-8 text-right">{plan.effort ?? "—"}%</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground w-12">Impact</span>
-                      <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-                        <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${plan.impact ?? 0}%` }} />
-                      </div>
-                      <span className="text-xs text-muted-foreground w-8 text-right">{plan.impact ?? "—"}%</span>
-                    </div>
-                  </div>
+        {/* Filters and Search */}
+        <div className="flex items-center gap-3 mb-4">
+          <div className="flex gap-1 p-1 bg-muted/50 rounded-lg">
+            {(["all", "active", "saved", "draft", "archived"] as const).map((status) => (
+              <button
+                key={status}
+                onClick={() => setStatusFilter(status)}
+                className={cn(
+                  "px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
+                  statusFilter === status
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
                 )}
-
-                {/* Footer: Updated date + Open Plan button */}
-                <div className="flex items-center justify-between pt-2 border-t">
-                  <span className="text-xs text-muted-foreground">Updated {plan.updatedAt}</span>
-                  <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">
-                    Open <ChevronRight className="ml-1 h-3 w-3" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+              >
+                {status === "all"
+                  ? "All"
+                  : status === "saved"
+                    ? "Published"
+                    : status.charAt(0).toUpperCase() + status.slice(1)}
+              </button>
+            ))}
+          </div>
+          <div className="relative flex-1 max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search plans..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 h-9 text-sm"
+            />
+          </div>
         </div>
+
+        {/* Plan Library Table */}
+        {filteredPlans.length === 0 ? (
+          <Card className="border-dashed">
+            <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
+                <Library className="h-6 w-6 text-muted-foreground" />
+              </div>
+              {planLibrary.plans.length === 0 ? (
+                <>
+                  <h4 className="font-medium text-foreground mb-2">You don't have any GTM plans yet</h4>
+                  <p className="text-sm text-muted-foreground max-w-[280px]">
+                    Generate your first GTM plan from Selected GTM Path above.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h4 className="font-medium text-foreground mb-2">
+                    No {statusFilter === "saved" ? "Published" : statusFilter} plans found
+                  </h4>
+                  <Button variant="outline" size="sm" onClick={() => setStatusFilter("all")}>
+                    Clear filters
+                  </Button>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="border rounded-lg overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/50">
+                  <TableHead className="w-[280px]">Plan</TableHead>
+                  <TableHead className="w-[200px]">Segment</TableHead>
+                  <TableHead className="w-[180px]">Objective & ACV</TableHead>
+                  <TableHead className="w-[140px]">Effort / Impact</TableHead>
+                  <TableHead className="w-[100px]">Updated</TableHead>
+                  <TableHead className="w-[100px] text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredPlans.map((plan) => (
+                  <TableRow key={plan.id} className={cn(plan.status === "archived" && "opacity-60")}>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-foreground truncate">{plan.name}</span>
+                            <Badge
+                              variant={plan.status === "active" ? "default" : "outline"}
+                              className={cn(
+                                "text-xs shrink-0",
+                                plan.status === "active" && "bg-primary text-primary-foreground",
+                                plan.status === "saved" && "bg-blue-50 text-blue-700 border-blue-200",
+                                plan.status === "draft" &&
+                                  "bg-transparent text-muted-foreground border-muted-foreground/50",
+                                plan.status === "archived" && "bg-muted text-muted-foreground border-muted",
+                              )}
+                            >
+                              {getStatusLabel(plan.status)}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground truncate">{plan.motionName}</p>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <p className="text-sm text-muted-foreground truncate">
+                        {plan.segment.industry} · {plan.segment.companySize} · {plan.segment.region}
+                      </p>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        <Badge variant="secondary" className="text-xs">
+                          {plan.objective}
+                        </Badge>
+                        <Badge variant="outline" className="text-xs">
+                          {plan.acvBand.toUpperCase()} ACV
+                        </Badge>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
+                            <div className="h-full bg-amber-500 rounded-full" style={{ width: `${plan.effort}%` }} />
+                          </div>
+                          <span className="text-xs text-muted-foreground w-8">{plan.effort}%</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
+                            <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${plan.impact}%` }} />
+                          </div>
+                          <span className="text-xs text-muted-foreground w-8">{plan.impact}%</span>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-xs text-muted-foreground">{formatPlanDate(plan.updatedAt)}</span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        {plan.status === "active" ? (
+                          <Star className="h-4 w-4 text-primary fill-primary" aria-label="Currently Active" />
+                        ) : plan.status === "saved" ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={() => handleSetActive(plan)}
+                            title="Set as Active"
+                          >
+                            <Star className="h-4 w-4" />
+                          </Button>
+                        ) : null}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem>
+                              <Eye className="h-4 w-4 mr-2" />
+                              View Plan
+                            </DropdownMenuItem>
+                            {plan.status === "draft" && (
+                              <>
+                                <DropdownMenuItem onClick={() => handlePublish(plan)}>
+                                  <Upload className="h-4 w-4 mr-2" />
+                                  Publish
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() => handleDeletePlan(plan)}
+                                  className="text-destructive focus:text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                            {plan.status === "saved" && (
+                              <>
+                                <DropdownMenuItem onClick={() => handleSetActive(plan)}>
+                                  <Star className="h-4 w-4 mr-2" />
+                                  Set as Active
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => handleArchive(plan)}>
+                                  <Archive className="h-4 w-4 mr-2" />
+                                  Archive
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                            {plan.status === "active" && (
+                              <DropdownMenuItem onClick={() => handleArchive(plan)}>
+                                <Archive className="h-4 w-4 mr-2" />
+                                Archive
+                              </DropdownMenuItem>
+                            )}
+                            {plan.status === "archived" && (
+                              <>
+                                <DropdownMenuItem onClick={() => handleRestore(plan)}>
+                                  <Upload className="h-4 w-4 mr-2" />
+                                  Restore as Published
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() => handleDeletePlan(plan)}
+                                  className="text-destructive focus:text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Delete Permanently
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
       </div>
+
+      <Dialog
+        open={confirmModal.open}
+        onOpenChange={(open) => !open && setConfirmModal({ ...confirmModal, open: false })}
+      >
+        <DialogContent>
+          {confirmModal.type === "switch-active" && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Switch Active GTM Plan?</DialogTitle>
+                <DialogDescription>
+                  You currently have <span className="font-medium">{confirmModal.currentActivePlan?.name}</span> set as
+                  your active plan. Switching will move it to Published status.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="py-4 space-y-3">
+                <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                  <Badge variant="outline" className="text-xs">
+                    Current
+                  </Badge>
+                  <span className="font-medium">{confirmModal.currentActivePlan?.name}</span>
+                </div>
+                <div className="flex items-center justify-center">
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <div className="flex items-center gap-3 p-3 bg-primary/5 rounded-lg border border-primary/20">
+                  <Badge className="text-xs bg-primary">New Active</Badge>
+                  <span className="font-medium">{confirmModal.targetPlan?.name}</span>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setConfirmModal({ ...confirmModal, open: false })}>
+                  Cancel
+                </Button>
+                <Button onClick={confirmModalAction}>Switch Active Plan</Button>
+              </DialogFooter>
+            </>
+          )}
+
+          {confirmModal.type === "archive-overflow" && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Archive Limit Reached</DialogTitle>
+                <DialogDescription>
+                  You have reached the maximum of 10 archived plans. Archiving this plan will permanently delete the
+                  oldest archived plan.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="py-4">
+                <div className="p-3 bg-destructive/10 rounded-lg border border-destructive/20">
+                  <p className="text-sm text-destructive">
+                    <span className="font-medium">{confirmModal.oldestArchivedPlan?.name}</span> will be permanently
+                    deleted.
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Archived{" "}
+                    {confirmModal.oldestArchivedPlan?.archivedAt
+                      ? formatPlanDate(confirmModal.oldestArchivedPlan.archivedAt)
+                      : "—"}
+                  </p>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setConfirmModal({ ...confirmModal, open: false })}>
+                  Cancel
+                </Button>
+                <Button variant="destructive" onClick={confirmModalAction}>
+                  Archive & Delete Oldest
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+
+          {confirmModal.type === "capacity" && (
+            <>
+              <DialogHeader>
+                <DialogTitle>
+                  {confirmModal.errorStatus === "saved"
+                    ? "Published"
+                    : confirmModal.errorStatus === "draft"
+                      ? "Draft"
+                      : "Plan"}{" "}
+                  Limit Reached
+                </DialogTitle>
+                <DialogDescription>
+                  You already have{" "}
+                  {confirmModal.errorStatus === "saved"
+                    ? "5 Published"
+                    : confirmModal.errorStatus === "draft"
+                      ? "5 Draft"
+                      : "maximum"}{" "}
+                  GTM plans. Archive or delete one before adding another.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setConfirmModal({ ...confirmModal, open: false })}>
+                  Close
+                </Button>
+                <Button
+                  onClick={() => {
+                    setStatusFilter(confirmModal.errorStatus === "saved" ? "saved" : "draft")
+                    setConfirmModal({ ...confirmModal, open: false })
+                  }}
+                >
+                  View {confirmModal.errorStatus === "saved" ? "Published" : "Draft"} Plans
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+
+          {confirmModal.type === "delete" && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Delete Plan?</DialogTitle>
+                <DialogDescription>
+                  Are you sure you want to permanently delete{" "}
+                  <span className="font-medium">{confirmModal.targetPlan?.name}</span>? This action cannot be undone.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setConfirmModal({ ...confirmModal, open: false })}>
+                  Cancel
+                </Button>
+                <Button variant="destructive" onClick={confirmModalAction}>
+                  Delete Plan
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

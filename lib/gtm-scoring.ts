@@ -9,6 +9,10 @@ export type AcvBand = "low" | "mid" | "high"
 export type MotionId = "outbound_abm" | "plg" | "vertical_motion" | "inbound_engine" | "customer_expansion"
 
 export interface SelectorInputs {
+  companyName?: string
+  companyUrl?: string
+  hqCountry?: string
+  targetMarketGeography?: string
   companySize: CompanySize
   primaryObjective?: GtmObjective
   secondaryObjectives?: GtmObjective[]

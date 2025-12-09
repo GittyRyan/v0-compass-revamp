@@ -8,6 +8,8 @@ import { AnalyzeMarketTab } from "./tabs/analyze-market-tab"
 import { AnalyzeCompetitionTab } from "./tabs/analyze-competition-tab"
 import { DefineICPTab } from "./tabs/define-icp-tab"
 import { GTMReportTab } from "./tabs/gtm-report-tab"
+import type { GtmPlan } from "@/lib/gtm-plans"
+import type { FlowType } from "@/app/compass/page"
 
 const tabs = [
   { id: "gtm-selector", label: "GTM Selector" },
@@ -23,9 +25,17 @@ interface CompassTabsProps {
   activeTab: string
   onTabChange: (tab: string) => void
   setupResetKey: number
+  onActivePlanChange?: (plan: GtmPlan | null) => void
+  flowType?: FlowType
 }
 
-export function CompassTabs({ activeTab, onTabChange, setupResetKey }: CompassTabsProps) {
+export function CompassTabs({
+  activeTab,
+  onTabChange,
+  setupResetKey,
+  onActivePlanChange,
+  flowType = "gtm-insight",
+}: CompassTabsProps) {
   return (
     <div className="flex flex-col gap-6">
       {/* Tab Navigation */}
@@ -50,7 +60,7 @@ export function CompassTabs({ activeTab, onTabChange, setupResetKey }: CompassTa
 
       {/* Tab Content */}
       <div>
-        {activeTab === "gtm-selector" && <GTMSelectorTab />}
+        {activeTab === "gtm-selector" && <GTMSelectorTab onActivePlanChange={onActivePlanChange} flowType={flowType} />}
         {activeTab === "gtm-setup" && <GTMSetupTab key={setupResetKey} />}
         {activeTab === "analyze-position" && <AnalyzePositionTab />}
         {activeTab === "analyze-market" && <AnalyzeMarketTab />}
