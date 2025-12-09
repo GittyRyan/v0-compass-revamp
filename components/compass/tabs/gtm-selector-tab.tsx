@@ -91,6 +91,7 @@ import {
   type GtmPlan,
   type GtmPlanLibrary,
   type PlanStatus,
+  formatPlanTime, // Import formatPlanTime
 } from "@/lib/gtm-plans"
 import { generateGtmStrategyForPlan } from "@/lib/strategy-service"
 
@@ -1733,7 +1734,7 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
                   <TableHead className="w-[200px]">Segment</TableHead>
                   <TableHead className="w-[180px]">Objective & ACV</TableHead>
                   <TableHead className="w-[140px]">Effort / Impact</TableHead>
-                  <TableHead className="w-[100px]">Updated</TableHead>
+                  <TableHead className="w-[100px]">Created</TableHead>
                   <TableHead className="w-[100px] text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -1795,7 +1796,10 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
                       </div>
                     </TableCell>
                     <TableCell>
-                      <span className="text-xs text-muted-foreground">{formatPlanDate(plan.updatedAt)}</span>
+                      <div className="flex flex-col">
+                        <span className="text-xs text-muted-foreground">{formatPlanDate(plan.createdAt)}</span>
+                        <span className="text-xs text-muted-foreground/70">{formatPlanTime(plan.createdAt)}</span>
+                      </div>
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">

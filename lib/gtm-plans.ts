@@ -348,6 +348,11 @@ export function formatPlanDate(isoDate: string): string {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
 }
 
+export function formatPlanTime(isoDate: string): string {
+  const date = new Date(isoDate)
+  return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
+}
+
 // Get status display label
 export function getStatusLabel(status: PlanStatus): string {
   switch (status) {
