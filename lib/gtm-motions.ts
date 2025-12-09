@@ -206,3 +206,6 @@ export const MOTION_CONFIGS_FROM_LIBRARY: MotionConfig[] = GTM_MOTION_LIBRARY.ma
   bestForPersonas: motion.bestForPersonas,
   weightSignals: 0.6,
 }))
+
+export const MOTION_CONFIGS = MOTION_CONFIGS_FROM_LIBRARY
+export const MOTION_LIBRARY = GTM_MOTION_LIBRARY

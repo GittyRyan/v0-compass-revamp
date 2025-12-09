@@ -1,21 +1,26 @@
 "use client"
 
-import { useState, useMemo, useEffect, useCallback } from "react"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+
+import { CardTitle } from "@/components/ui/card"
+
+import { CardHeader } from "@/components/ui/card"
+
+import { useState, useMemo, useCallback, useEffect } from "react"
+import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { Progress } from "@/components/ui/progress"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Progress } from "@/components/ui/progress"
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
+  SelectGroup,
+  SelectLabel,
 } from "@/components/ui/select"
 import {
   Dialog,
@@ -25,7 +30,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,20 +37,46 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
 import {
+  Target,
+  Users,
+  TrendingUp,
+  Sparkles,
+  Check,
+  ChevronRight,
+  Clock,
+  Settings2,
+  Download,
+  BarChart3,
+  AlertCircle,
+  Library,
+  Star,
+  MoreHorizontal,
+  Archive,
+  Trash2,
+  Search,
+  Zap,
+  Loader2,
+  SlidersHorizontal,
+  ChevronDown,
+  Eye,
+  Upload,
+  CircleDot,
+} from "lucide-react"
+import { MOTION_CONFIGS, MOTION_LIBRARY, type MotionId, type GtmMotion } from "@/lib/gtm-motions"
+import {
   scoreAllMotions,
-  MOTION_CONFIGS,
+  mapCompanySizeToScoring,
   mapObjectiveToScoring,
   mapAcvToScoring,
-  mapCompanySizeToScoring,
   mapTimeHorizonToScoring,
   type SelectorInputs,
-  type MotionId,
   type MotionScoreBreakdown,
 } from "@/lib/gtm-scoring"
 import { buildWhyRecommendation } from "@/lib/gtm-explanation"
-import { GTM_MOTION_LIBRARY, type GtmMotion } from "@/lib/gtm-motions"
 import {
   loadPlanLibrary,
   savePlanLibrary,
@@ -54,40 +84,15 @@ import {
   applyStatusChange,
   deletePlan,
   getActivePlan,
-  countByStatus,
   formatPlanDate,
   getStatusLabel,
+  countByStatus,
   getSeedPlanLibrary,
-  type GtmPlanLibrary,
   type GtmPlan,
+  type GtmPlanLibrary,
   type PlanStatus,
 } from "@/lib/gtm-plans"
-import {
-  AlertCircle,
-  Archive,
-  Bookmark,
-  Check,
-  ChevronDown,
-  ChevronRight,
-  Download,
-  Eye,
-  MoreHorizontal,
-  Search,
-  Sparkles,
-  Star,
-  Target,
-  Trash2,
-  TrendingUp,
-  Upload,
-  Zap,
-  BarChart3,
-  Clock,
-  Settings2,
-  Building2,
-  SlidersHorizontal,
-  Library,
-} from "lucide-react"
-import type { FlowType } from "@/app/compass/page"
+import { generateGtmStrategyForPlan } from "@/lib/strategy-service"
 
 const motionMetadata: Record<
   MotionId,
@@ -193,7 +198,7 @@ const planSummaryByMotionId: Record<MotionId, string> = {
 }
 
 const motionLibraryById: Record<MotionId, GtmMotion> = Object.fromEntries(
-  GTM_MOTION_LIBRARY.map((m) => [m.id, m]),
+  MOTION_LIBRARY.map((m) => [m.id, m]),
 ) as Record<MotionId, GtmMotion>
 
 const TOP_N_MOTIONS = 3
@@ -232,12 +237,16 @@ const TARGET_MARKET_GEOGRAPHY_OPTIONS = [
   { value: "europe", label: "Europe" },
 ]
 
+// Define FlowType
+type FlowType = "gtm-insight" | "gtm-strategy"
+
 interface GTMSelectorTabProps {
   onActivePlanChange?: (plan: GtmPlan | null) => void
   flowType?: FlowType
 }
 
 export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }: GTMSelectorTabProps) {
+  const { toast } = useToast()
   const [companyName, setCompanyName] = useState(() =>
     flowType === "gtm-insight" ? MOCK_COMPANY_PROFILE.companyName : "",
   )
@@ -285,6 +294,8 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
     oldestArchivedPlan?: GtmPlan
     errorStatus?: PlanStatus
   }>({ open: false, type: "switch-active" })
+
+  const [isGenerating, setIsGenerating] = useState(false)
 
   useEffect(() => {
     if (flowType === "gtm-insight") {
@@ -611,6 +622,114 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
     [motionScores],
   )
 
+  const handleGenerateStrategy = useCallback(async () => {
+    // Guard: require inputs and selected motion
+    if (!hasRequiredInputs) {
+      toast({
+        title: "Missing Required Inputs",
+        description: "Please complete all required inputs before generating a strategy.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!selectedMotion) {
+      toast({
+        title: "No Motion Selected",
+        description: "Please select a GTM motion before generating a strategy.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const motionConfig = MOTION_CONFIGS.find((m) => m.id === selectedMotion)
+    const motionMeta = motionLibraryById[selectedMotion]
+    if (!motionConfig || !motionMeta) return
+
+    const scores = scoresById[selectedMotion]
+    if (!scores) return
+
+    setIsGenerating(true)
+
+    try {
+      // Create or update plan as Active
+      const newPlan: Omit<GtmPlan, "id" | "createdAt" | "updatedAt" | "tenantId"> = {
+        name: `${motionMeta.name} - ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })}`,
+        status: "active", // Create as active plan
+        motionId: selectedMotion,
+        motionName: motionMeta.name,
+        segment: {
+          industry: industry || "Not specified",
+          companySize: companySize || "Not specified",
+          region: hqCountry || "Not specified",
+        },
+        objective: primaryObjective || "pipeline",
+        acvBand: (mapAcvToScoring(acvBand) as "low" | "mid" | "high") || "mid",
+        personas: parsePersonas(targetPersonas),
+        effort: scores.effort,
+        impact: scores.impact,
+        matchPercent: scores.matchPercent,
+        timelineMonths: mapTimeHorizonToScoring(timeHorizon),
+      }
+
+      const result = createPlan(planLibrary, newPlan)
+
+      if (result.success) {
+        persistLibrary(result.data)
+
+        // Find the newly created active plan
+        const activePlan = getActivePlan(result.data)
+
+        if (activePlan) {
+          // Call strategy generation hook
+          const strategyResult = await generateGtmStrategyForPlan(activePlan)
+
+          if (strategyResult.success) {
+            toast({
+              title: "GTM Strategy Generated",
+              description: strategyResult.message || "Continue in Analyze Position to review details.",
+            })
+          } else {
+            toast({
+              title: "Strategy Generation Failed",
+              description: "The plan was saved but strategy generation encountered an error.",
+              variant: "destructive",
+            })
+          }
+        }
+      } else if (result.error.type === "CAPACITY_EXCEEDED") {
+        setConfirmModal({
+          open: true,
+          type: "capacity",
+          errorStatus: result.error.status,
+        })
+      }
+    } catch (error) {
+      console.error("[GTMSelector] Strategy generation error:", error)
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred while generating the strategy.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsGenerating(false)
+    }
+  }, [
+    hasRequiredInputs,
+    selectedMotion,
+    planLibrary,
+    persistLibrary,
+    industry,
+    companySize,
+    hqCountry,
+    primaryObjective,
+    acvBand,
+    targetPersonas,
+    timeHorizon,
+    scoresById,
+    toast,
+  ])
+
   const sortedMotions = useMemo(() => {
     return [...motionScores].sort((a, b) => b.matchPercent - a.matchPercent)
   }, [motionScores])
@@ -652,16 +771,79 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
     setTargetDepartments((prev) => (prev.includes(dept) ? prev.filter((d) => d !== dept) : [...prev, dept]))
   }
 
+  const handleSaveDraft = useCallback(() => {
+    if (!selectedMotion) return
+
+    const motionConfig = MOTION_CONFIGS.find((m) => m.id === selectedMotion)
+    const motionMeta = motionLibraryById[selectedMotion]
+    if (!motionConfig || !motionMeta) return
+
+    const scores = scoresById[selectedMotion]
+    if (!scores) return
+
+    const newPlan: Omit<GtmPlan, "id" | "createdAt" | "updatedAt" | "tenantId"> = {
+      name: `${motionMeta.name} - ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })}`,
+      status: "draft", // Always draft now
+      motionId: selectedMotion,
+      motionName: motionMeta.name,
+      segment: {
+        industry: industry || "Not specified",
+        companySize: companySize || "Not specified",
+        region: hqCountry || "Not specified",
+      },
+      objective: primaryObjective || "pipeline",
+      acvBand: (mapAcvToScoring(acvBand) as "low" | "mid" | "high") || "mid",
+      personas: parsePersonas(targetPersonas),
+      effort: scores.effort,
+      impact: scores.impact,
+      matchPercent: scores.matchPercent,
+      timelineMonths: mapTimeHorizonToScoring(timeHorizon),
+    }
+
+    const result = createPlan(planLibrary, newPlan)
+    if (result.success) {
+      persistLibrary(result.data)
+      toast({
+        title: "Draft Saved",
+        description: "Your GTM configuration has been saved as a draft.",
+      })
+    } else if (result.error.type === "CAPACITY_EXCEEDED") {
+      setConfirmModal({
+        open: true,
+        type: "capacity",
+        errorStatus: result.error.status,
+      })
+    }
+  }, [
+    selectedMotion,
+    planLibrary,
+    persistLibrary,
+    industry,
+    companySize,
+    hqCountry,
+    primaryObjective,
+    acvBand,
+    targetPersonas,
+    timeHorizon,
+    scoresById,
+    toast,
+  ])
+
   return (
     <div className="space-y-6">
       {/* Three Column Layout */}
       <div className="grid grid-cols-12 gap-6">
         {/* Left Column - Inputs */}
         <div className="col-span-12 lg:col-span-3 space-y-4">
+          <h3 className="font-semibold text-foreground flex items-center gap-2">
+            <CircleDot className="h-5 w-5 text-primary" />
+            Inputs
+          </h3>
+
           <Card className="border-l-4 border-l-primary">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <Building2 className="h-4 w-4" />
+                <Users className="h-4 w-4" />
                 Company Profile
               </CardTitle>
             </CardHeader>
@@ -790,7 +972,7 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
                 </Label>
                 <Select value={targetCompanySize} onValueChange={setTargetCompanySize}>
                   <SelectTrigger className="h-9 text-sm">
-                    <SelectValue placeholder="Select target size" />
+                    <SelectValue placeholder="Select size" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="startup">Startup (1-50)</SelectItem>
@@ -944,7 +1126,7 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
                 <div className="flex items-start gap-2">
                   <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
                   <div className="space-y-1">
-                    <p className="text-xs font-medium text-amber-800">Complete Required Inputs</p>
+                    <p className="text-xs font-medium text-amber-800">Required Inputs</p>
                     <div className="flex flex-wrap gap-1">
                       {[
                         "Company",
@@ -1363,22 +1545,52 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
                   </div>
                 </div>
 
-                <div className="space-y-2 pt-2">
-                  <Button className="w-full" size="sm" onClick={() => handleCreatePlan(false)}>
-                    <Sparkles className="mr-2 h-4 w-4" />
-                    Save as Published Plan
-                    <ChevronRight className="ml-2 h-4 w-4" />
-                  </Button>
+                <div className="space-y-3 pt-2">
+                  {/* Helper text */}
+                  <p className="text-xs text-muted-foreground text-center">
+                    Use this to populate downstream analysis tabs with this GTM path.
+                  </p>
+
+                  {/* Primary CTA: Generate GTM Strategy */}
                   <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full bg-transparent"
-                    onClick={() => handleCreatePlan(true)}
+                    className="w-full"
+                    size="default"
+                    disabled={!hasRequiredInputs || !selectedMotion || isGenerating}
+                    onClick={handleGenerateStrategy}
                   >
-                    <Bookmark className="mr-2 h-4 w-4" />
-                    Save as Draft
+                    {isGenerating ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="mr-2 h-4 w-4" />
+                        Generate GTM Strategy
+                        <ChevronRight className="ml-2 h-4 w-4" />
+                      </>
+                    )}
                   </Button>
-                  <Button variant="ghost" size="sm" className="w-full">
+
+                  {/* Secondary actions */}
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 bg-transparent"
+                      onClick={handleSaveDraft}
+                      disabled={isGenerating}
+                    >
+                      <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                      Save as Draft
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground text-center">
+                    Save a draft configuration without generating a full strategy.
+                  </p>
+
+                  {/* Export option */}
+                  <Button variant="ghost" size="sm" className="w-full" disabled={isGenerating}>
                     <Download className="mr-2 h-4 w-4" />
                     Export Summary
                   </Button>

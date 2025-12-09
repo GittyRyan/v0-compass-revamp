@@ -106,7 +106,21 @@ export function buildWhyRecommendation(
     )
   }
 
-  // 5) Effort vs Impact summary
+  // 5) Timeline impact on effort
+  if (inputs.timeHorizonMonths === 3) {
+    reasons.push(
+      `Effort is higher due to an aggressive 3-month execution timeline, requiring compressed coordination and faster ramp-up.`,
+    )
+  } else if (inputs.timeHorizonMonths === 6) {
+    reasons.push(`A 6-month timeline adds moderate execution pressure, slightly increasing the effort required.`)
+  } else if (inputs.timeHorizonMonths === 12) {
+    reasons.push(
+      `Effort is slightly reduced because this motion allows more distributed execution over a 12-month window.`,
+    )
+  }
+  // Note: 9-month timeline is baseline, no specific explanation needed
+
+  // 6) Effort vs Impact summary
   if (scores.effort <= 55) {
     reasons.push(`Execution lift is relatively low for your current stage and team.`)
   } else if (scores.effort >= 75) {
@@ -121,7 +135,7 @@ export function buildWhyRecommendation(
     reasons.push(`This motion offers solid upside with a balanced risk–return profile.`)
   }
 
-  // 6) Overall match narrative
+  // 7) Overall match narrative
   if (scores.matchPercent >= 85) {
     reasons.push(`Overall, this motion is a strong fit for your current GTM situation.`)
   } else if (scores.matchPercent >= 70) {

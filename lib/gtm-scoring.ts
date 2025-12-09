@@ -68,6 +68,13 @@ const isAdjacentAcv = (a: AcvBand, b: AcvBand): boolean => {
   return false
 }
 
+const TIMELINE_EFFORT_ADJUSTMENT: Record<3 | 6 | 9 | 12, number> = {
+  3: 20, // Highly compressed execution window
+  6: 10, // Moderately compressed
+  9: 0, // Baseline
+  12: -5, // Execution is less intense when spread out
+}
+
 // PLG and Inbound favor low ACV (high velocity), ABM/Vertical/Expansion favor high ACV
 const ACV_MOTION_AFFINITY: Record<MotionId, Record<AcvBand, number>> = {
   // PLG: strong for low ACV, decent for mid, weak for high
@@ -141,14 +148,19 @@ export function scoreMotion(motion: MotionConfig, inputs: SelectorInputs): Motio
 
   const fitScore = round(0.35 * objectiveFit + 0.25 * sizeFit + 0.25 * acvFit + 0.15 * personaFit)
 
+  // Start with base effort
   let effort = motion.baseEffort
+
+  // Add fit-based adjustments
   if (objectiveFit < 60) effort += 10
   if (sizeFit < 60) effort += 10
   if (acvFit < 60) effort += 10
-  if (inputs.timeHorizonMonths === 3 && motion.baseEffort > 65) {
-    effort += 5
-  }
-  effort = clamp(effort, 20, 95)
+
+  // Apply timeline-based adjustment: finalEffort = clamp(baseEffort + timelineAdjustment, 0, 100)
+  const timelineAdjustment = TIMELINE_EFFORT_ADJUSTMENT[inputs.timeHorizonMonths]
+  effort += timelineAdjustment
+
+  effort = clamp(effort, 0, 100)
 
   let impact = round(0.5 * motion.baseImpact + 0.5 * fitScore)
   impact = clamp(impact, 20, 100)
