@@ -48,7 +48,6 @@ import {
   Check,
   ChevronRight,
   Clock,
-  Download,
   BarChart3,
   AlertCircle,
   Library,
@@ -1563,12 +1562,6 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
                   <p className="text-xs text-muted-foreground text-center">
                     Save a draft configuration without generating a full strategy.
                   </p>
-
-                  {/* Export option */}
-                  <Button variant="ghost" size="sm" className="w-full" disabled={isGenerating}>
-                    <Download className="mr-2 h-4 w-4" />
-                    Export Summary
-                  </Button>
                 </div>
               </CardContent>
             </Card>
