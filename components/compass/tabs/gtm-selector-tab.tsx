@@ -897,7 +897,7 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
             Inputs
           </h3>
 
-          <Card className="border-l-4 border-l-primary">
+          <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
                 <Users className="h-4 w-4" />
