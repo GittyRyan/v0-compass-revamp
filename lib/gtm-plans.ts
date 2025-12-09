@@ -41,6 +41,59 @@ export interface GtmPlanLibrary {
   plans: GtmPlan[]
 }
 
+export interface PlanNamingContext {
+  motionName: string
+  primaryObjective?: string // e.g. "pipeline", "expand-accounts"
+  targetMarketGeography?: string // e.g. "North America", "Global"
+  segment?: {
+    industry?: string // "Technology / SaaS"
+    companySize?: string // "Mid-Market", "Enterprise"
+    region?: string // may be target region if present
+  }
+  createdAt?: Date
+}
+
+function objectiveToLabel(objective: string): string {
+  switch (objective) {
+    case "pipeline":
+      return "Pipeline Growth"
+    case "expand-accounts":
+      return "Account Expansion"
+    case "market_expansion":
+      return "Market Expansion"
+    case "competitive_positioning":
+      return "Competitive Positioning"
+    default:
+      return objective.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+  }
+}
+
+export function generatePlanName(ctx: PlanNamingContext): string {
+  const pieces: string[] = []
+
+  // 1) Motion name (required, anchor)
+  pieces.push(ctx.motionName.trim())
+
+  // 2) Objective (if present) – use a readable label, not raw slug
+  if (ctx.primaryObjective) {
+    pieces.push(objectiveToLabel(ctx.primaryObjective))
+  }
+
+  // 3) Geography hint if not Global
+  const geo = ctx.targetMarketGeography?.trim()
+  if (geo && geo.toLowerCase() !== "global") {
+    pieces.push(geo)
+  }
+
+  // 4) Optional fall-back date stamp for uniqueness
+  if (ctx.createdAt) {
+    const date = ctx.createdAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+    pieces.push(date)
+  }
+
+  return pieces.filter(Boolean).join(" · ")
+}
+
 // Capacity limits
 const LIMITS = {
   active: 1,
@@ -100,12 +153,12 @@ export function savePlanLibrary(lib: GtmPlanLibrary): void {
   }
 }
 
-// Error types for UI handling
 export type PlanLibraryError =
   | { type: "INVALID_TRANSITION"; from: PlanStatus; to: PlanStatus }
   | { type: "CAPACITY_EXCEEDED"; status: PlanStatus; limit: number; current: number }
   | { type: "PLAN_NOT_FOUND"; planId: string }
   | { type: "ARCHIVE_OVERFLOW"; oldestPlan: GtmPlan }
+  | { type: "VALIDATION_ERROR"; message: string }
 
 export type PlanLibraryResult<T> = { success: true; data: T } | { success: false; error: PlanLibraryError }
 
@@ -306,6 +359,41 @@ export function getStatusLabel(status: PlanStatus): string {
       return "Draft"
     case "archived":
       return "Archived"
+  }
+}
+
+export function renamePlan(
+  library: GtmPlanLibrary,
+  planId: string,
+  newName: string,
+): PlanLibraryResult<GtmPlanLibrary> {
+  const trimmed = newName.trim()
+
+  if (!trimmed) {
+    return {
+      success: false,
+      error: { type: "VALIDATION_ERROR", message: "Plan name cannot be empty." },
+    }
+  }
+
+  const plans = library.plans.slice()
+  const index = plans.findIndex((p) => p.id === planId)
+  if (index === -1) {
+    return {
+      success: false,
+      error: { type: "PLAN_NOT_FOUND", planId },
+    }
+  }
+
+  plans[index] = {
+    ...plans[index],
+    name: trimmed,
+    updatedAt: new Date().toISOString(),
+  }
+
+  return {
+    success: true,
+    data: { ...library, plans },
   }
 }
 

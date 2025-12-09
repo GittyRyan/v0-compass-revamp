@@ -32,15 +32,9 @@ export function CompassHeader({
       <div className="flex items-center justify-end">
         <div className="flex items-center gap-3">
           {activePlan ? (
-            <div className="flex flex-col items-end">
-              <Badge variant="secondary" className="h-8 px-3 text-sm font-medium">
-                Active Plan · {activePlan.name}
-              </Badge>
-              <span className="text-xs text-muted-foreground mt-0.5">
-                {activePlan.segment.industry} · {activePlan.segment.companySize} · {activePlan.segment.region} ·{" "}
-                {activePlan.motionName}
-              </span>
-            </div>
+            <Badge variant="secondary" className="h-8 px-3 text-sm font-medium">
+              Active Plan · {activePlan.name}
+            </Badge>
           ) : (
             <Button
               variant="outline"

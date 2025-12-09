@@ -86,6 +86,8 @@ import {
   getStatusLabel,
   countByStatus,
   getSeedPlanLibrary,
+  generatePlanName, // Import generatePlanName
+  renamePlan, // Import renamePlan
   type GtmPlan,
   type GtmPlanLibrary,
   type PlanStatus,
@@ -284,7 +286,7 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
 
   const [confirmModal, setConfirmModal] = useState<{
     open: boolean
-    type: "switch-active" | "archive-overflow" | "capacity" | "delete" | "publish"
+    type: "switch-active" | "archive-overflow" | "capacity" | "delete" | "publish" // Removed "rename" type since rename now uses separate renameState
     planId?: string
     currentActivePlan?: GtmPlan | null
     targetPlan?: GtmPlan
@@ -293,6 +295,11 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
   }>({ open: false, type: "switch-active" })
 
   const [isGenerating, setIsGenerating] = useState(false)
+
+  const [renameState, setRenameState] = useState<{
+    planId: string | null
+    currentName: string
+  }>({ planId: null, currentName: "" })
 
   useEffect(() => {
     if (flowType === "gtm-insight") {
@@ -431,6 +438,13 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
     })
   }, [])
 
+  const handleRenamePlan = useCallback((plan: GtmPlan) => {
+    setRenameState({
+      planId: plan.id,
+      currentName: plan.name,
+    })
+  }, [])
+
   const confirmModalAction = useCallback(() => {
     const { type, planId, currentActivePlan, oldestArchivedPlan } = confirmModal
 
@@ -473,14 +487,24 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
       if (!scores) return
 
       const newPlan: Omit<GtmPlan, "id" | "createdAt" | "updatedAt" | "tenantId"> = {
-        name: `${motionMeta.name} - ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })}`,
+        name: generatePlanName({
+          motionName: motionMeta.name,
+          primaryObjective: primaryObjective || undefined,
+          targetMarketGeography: targetMarketGeography || undefined,
+          segment: {
+            industry: industry || undefined,
+            companySize: companySize || undefined,
+            region: hqCountry || undefined,
+          },
+          createdAt: new Date(),
+        }),
         status: asDraft ? "draft" : "saved",
         motionId: selectedMotion,
         motionName: motionMeta.name,
         segment: {
           industry: industry || "Not specified",
           companySize: companySize || "Not specified",
-          region: hqCountry || "Not specified", // Use hqCountry here
+          region: hqCountry || "Not specified",
         },
         objective: primaryObjective || "pipeline",
         acvBand: (mapAcvToScoring(acvBand) as "low" | "mid" | "high") || "mid",
@@ -508,11 +532,12 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
       persistLibrary,
       industry,
       companySize,
-      hqCountry, // Use hqCountry here
+      hqCountry,
       primaryObjective,
       acvBand,
       targetPersonas,
       timeHorizon,
+      targetMarketGeography, // Added missing dependency
     ],
   )
 
@@ -649,9 +674,22 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
     setIsGenerating(true)
 
     try {
+      const now = new Date()
+      const newPlanName = generatePlanName({
+        motionName: motionMeta.name,
+        primaryObjective: primaryObjective || undefined,
+        targetMarketGeography: targetMarketGeography || undefined,
+        segment: {
+          industry: industry || undefined,
+          companySize: companySize || undefined,
+          region: hqCountry || undefined,
+        },
+        createdAt: now,
+      })
+
       // Create or update plan as Active
       const newPlan: Omit<GtmPlan, "id" | "createdAt" | "updatedAt" | "tenantId"> = {
-        name: `${motionMeta.name} - ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })}`,
+        name: newPlanName, // Use generated name
         status: "active", // Create as active plan
         motionId: selectedMotion,
         motionName: motionMeta.name,
@@ -725,6 +763,13 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
     timeHorizon,
     scoresById,
     toast,
+    motionLibraryById, // Added motionLibraryById
+    generatePlanName, // Added generatePlanName
+    primaryObjective, // Added primaryObjective
+    targetMarketGeography, // Added targetMarketGeography
+    companySize, // Added companySize
+    industry, // Added industry
+    hqCountry, // Added hqCountry
   ])
 
   const sortedMotions = useMemo(() => {
@@ -778,8 +823,21 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
     const scores = scoresById[selectedMotion]
     if (!scores) return
 
+    const now = new Date()
+    const newPlanName = generatePlanName({
+      motionName: motionMeta.name,
+      primaryObjective: primaryObjective || undefined,
+      targetMarketGeography: targetMarketGeography || undefined,
+      segment: {
+        industry: industry || undefined,
+        companySize: companySize || undefined,
+        region: hqCountry || undefined,
+      },
+      createdAt: now,
+    })
+
     const newPlan: Omit<GtmPlan, "id" | "createdAt" | "updatedAt" | "tenantId"> = {
-      name: `${motionMeta.name} - ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })}`,
+      name: newPlanName, // Use generated name
       status: "draft", // Always draft now
       motionId: selectedMotion,
       motionName: motionMeta.name,
@@ -824,6 +882,8 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
     timeHorizon,
     scoresById,
     toast,
+    motionLibraryById, // Added motionLibraryById
+    generatePlanName, // Added generatePlanName
   ])
 
   return (
@@ -1763,6 +1823,10 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
                               <Eye className="h-4 w-4 mr-2" />
                               View Plan
                             </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleRenamePlan(plan)}>
+                              <SlidersHorizontal className="h-4 w-4 mr-2" />
+                              Rename
+                            </DropdownMenuItem>
                             {plan.status === "draft" && (
                               <>
                                 <DropdownMenuItem onClick={() => handlePublish(plan)}>
@@ -1954,6 +2018,50 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
               </DialogFooter>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Rename Dialog */}
+      <Dialog
+        open={!!renameState.planId}
+        onOpenChange={(open) => !open && setRenameState({ planId: null, currentName: "" })}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rename GTM Plan</DialogTitle>
+            <DialogDescription>Update the name shown in your GTM Plan Library.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-4">
+            <Label htmlFor="plan-name">Plan name</Label>
+            <Input
+              id="plan-name"
+              value={renameState.currentName}
+              onChange={(e) => setRenameState((prev) => ({ ...prev, currentName: e.target.value }))}
+              placeholder="Enter plan name"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenameState({ planId: null, currentName: "" })}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!renameState.planId) return
+                const result = renamePlan(planLibrary, renameState.planId, renameState.currentName)
+                if (result.success) {
+                  persistLibrary(result.data)
+                  toast({ title: "Plan renamed", description: "The GTM plan name was updated." })
+                  setRenameState({ planId: null, currentName: "" })
+                } else if (result.error?.type === "VALIDATION_ERROR") {
+                  toast({ title: "Invalid name", description: result.error.message, variant: "destructive" })
+                } else {
+                  toast({ title: "Rename failed", description: "Could not rename this plan.", variant: "destructive" })
+                }
+              }}
+            >
+              Save
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
