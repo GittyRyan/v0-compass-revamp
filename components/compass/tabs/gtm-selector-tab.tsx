@@ -48,7 +48,6 @@ import {
   Check,
   ChevronRight,
   Clock,
-  Settings2,
   Download,
   BarChart3,
   AlertCircle,
@@ -64,7 +63,7 @@ import {
   ChevronDown,
   Eye,
   Upload,
-  CircleDot,
+  FileInput,
 } from "lucide-react"
 import { MOTION_CONFIGS, MOTION_LIBRARY, type MotionId, type GtmMotion } from "@/lib/gtm-motions"
 import {
@@ -278,7 +277,6 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
   const [brandVoice, setBrandVoice] = useState("")
 
   const [selectedMotion, setSelectedMotion] = useState<MotionId | null>(null)
-  const [executionMode, setExecutionMode] = useState<"guided" | "autonomous">("guided")
   const [showWhyExpanded, setShowWhyExpanded] = useState<Record<string, boolean>>({})
 
   const [planLibrary, setPlanLibrary] = useState<GtmPlanLibrary>({ tenantId: DEFAULT_TENANT_ID, plans: [] })
@@ -836,7 +834,7 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
         {/* Left Column - Inputs */}
         <div className="col-span-12 lg:col-span-3 space-y-4">
           <h3 className="font-semibold text-foreground flex items-center gap-2">
-            <CircleDot className="h-5 w-5 text-primary" />
+            <FileInput className="h-5 w-5 text-primary" />
             Inputs
           </h3>
 
@@ -1499,28 +1497,6 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
                       ))}
                     </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs flex items-center gap-1.5">
-                      <Settings2 className="h-3.5 w-3.5" />
-                      Execution Mode
-                    </Label>
-                    <div className="flex rounded-lg border bg-muted/30 p-0.5">
-                      {(["guided", "autonomous"] as const).map((mode) => (
-                        <button
-                          key={mode}
-                          onClick={() => setExecutionMode(mode)}
-                          className={cn(
-                            "flex-1 text-xs font-medium py-1.5 px-2 rounded-md transition-colors capitalize",
-                            executionMode === mode
-                              ? "bg-primary text-primary-foreground shadow-sm"
-                              : "text-muted-foreground hover:text-foreground",
-                          )}
-                        >
-                          {mode}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
                 </div>
 
                 {/* AI GTM Plan Preview */}
@@ -1538,8 +1514,7 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
                       ))}
                     </ul>
                     <p className="text-xs text-muted-foreground pt-1 border-t border-border/50">
-                      Over the next <span className="font-medium text-foreground">{timeHorizon} months</span> in{" "}
-                      <span className="font-medium text-foreground capitalize">{executionMode}</span> mode,{" "}
+                      Over the next <span className="font-medium text-foreground">{timeHorizon} months</span>,{" "}
                       {planSummaryByMotionId[selectedMotion]}
                     </p>
                   </div>
