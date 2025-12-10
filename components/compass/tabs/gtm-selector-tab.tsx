@@ -102,7 +102,7 @@ const motionMetadata: Record<
     drivers: string[]
     socialProof: string
   }
-} = {
+> = {
   plg: {
     id: 1,
     drivers: [
