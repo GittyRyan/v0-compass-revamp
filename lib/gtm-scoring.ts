@@ -6,7 +6,17 @@ export type CompanySize = "smb" | "mid" | "enterprise"
 export type GtmObjective = "pipeline" | "awareness" | "expansion" | "new_market"
 export type AcvBand = "low" | "mid" | "high"
 
-export type MotionId = "outbound_abm" | "plg" | "vertical_motion" | "inbound_engine" | "customer_expansion"
+export type MotionId =
+  | "plg"
+  | "sales_led"
+  | "outbound_abm"
+  | "inbound_demand_gen"
+  | "hybrid_plg_sales_assist"
+  | "partner_led"
+  | "ecosystem_led"
+  | "community_led"
+  | "event_led"
+  | "vertical_specific"
 
 export type OpsIntensity = "light" | "moderate" | "heavy"
 
@@ -15,17 +25,24 @@ export interface SelectorInputs {
   companyUrl?: string
   hqCountry?: string
   targetMarketGeography?: string
+  industry?: string
+  targetIndustry?: string
   companySize: CompanySize
+  targetCompanySize?: CompanySize
   primaryObjective?: GtmObjective
   secondaryObjectives?: GtmObjective[]
   acvBand?: AcvBand
   personas: string[]
+  targetDepartments?: string[]
   timeHorizonMonths: 3 | 6 | 9 | 12
 }
 
 export interface MotionConfig {
   id: MotionId
   name: string
+  coreStrategy?: string
+  bestFor?: string
+  lifecycleStages?: string[]
   baseEffort: number
   baseImpact: number
   bestForSizes: CompanySize[]
@@ -36,6 +53,15 @@ export interface MotionConfig {
   recommendedHorizonMonths: 3 | 6 | 9 | 12
   opsIntensity: OpsIntensity
   channelCount: number
+  matchWeights?: {
+    primaryObjective?: Record<string, number>
+    acvBand?: Record<string, number>
+    companySize?: Record<string, number>
+    targetCompanySize?: Record<string, number>
+    industry?: Record<string, number>
+    targetMarketGeography?: Record<string, number>
+    personaCount?: { low: number; medium: number; high: number }
+  }
 }
 
 export interface MotionScoreBreakdown {
@@ -48,6 +74,9 @@ export interface MotionScoreBreakdown {
   sizeFit: number
   acvFit: number
   personaFit: number
+  industryFit?: number
+  geoFit?: number
+  targetSizeFit?: number
   fitScore: number
   // Dynamic Impact multipliers (for explanation engine)
   motionFitMultiplier: number
@@ -69,6 +98,16 @@ const clampPercent = (value: number) => clamp(Math.round(value), 0, 100)
 
 const round = (value: number) => Math.round(value)
 
+const normalizeKey = (value?: string) => value?.trim().toLowerCase() ?? ""
+
+const scoreFromWeights = (value: string | undefined, weights?: Record<string, number>): number | undefined => {
+  if (!value || !weights) return undefined
+  const normalizedValue = normalizeKey(value)
+  const matchedEntry = Object.entries(weights).find(([key]) => normalizeKey(key) === normalizedValue)
+  if (!matchedEntry) return undefined
+  return clampPercent(matchedEntry[1])
+}
+
 const isAdjacentSize = (a: CompanySize, b: CompanySize): boolean => {
   if (a === b) return true
   if (a === "smb" && b === "mid") return true
@@ -85,18 +124,18 @@ const isAdjacentAcv = (a: AcvBand, b: AcvBand): boolean => {
   return false
 }
 
-// PLG and Inbound favor low ACV (high velocity), ABM/Vertical/Expansion favor high ACV
+// PLG and Inbound favor low ACV (high velocity), ABM/Sales/Vertical favor higher ACV
 const ACV_MOTION_AFFINITY: Record<MotionId, Record<AcvBand, number>> = {
-  // PLG: strong for low ACV, decent for mid, weak for high
-  plg: { low: 95, mid: 75, high: 45 },
-  // Inbound: strong for low ACV, decent for mid, weak for high
-  inbound_engine: { low: 90, mid: 80, high: 50 },
-  // Outbound ABM: weak for low, decent for mid, strong for high
-  outbound_abm: { low: 45, mid: 75, high: 95 },
-  // Vertical: weak for low, decent for mid, strong for high
-  vertical_motion: { low: 50, mid: 70, high: 92 },
-  // Customer Expansion: moderate for low, good for mid, strong for high
-  customer_expansion: { low: 55, mid: 80, high: 90 },
+  plg: { low: 95, mid: 80, high: 55 },
+  sales_led: { low: 55, mid: 85, high: 95 },
+  inbound_demand_gen: { low: 90, mid: 80, high: 55 },
+  outbound_abm: { low: 45, mid: 85, high: 95 },
+  hybrid_plg_sales_assist: { low: 80, mid: 85, high: 70 },
+  partner_led: { low: 50, mid: 80, high: 92 },
+  ecosystem_led: { low: 55, mid: 85, high: 92 },
+  community_led: { low: 90, mid: 75, high: 55 },
+  event_led: { low: 60, mid: 80, high: 90 },
+  vertical_specific: { low: 55, mid: 85, high: 92 },
 }
 
 // ---- Import library-driven motion configs ----
@@ -107,6 +146,14 @@ export const MOTION_CONFIGS: MotionConfig[] = MOTION_CONFIGS_FROM_LIBRARY
 // ---- Fit scoring helpers ----
 
 function computeObjectiveFit(motion: MotionConfig, primary: GtmObjective, secondary?: GtmObjective[]): number {
+  const weightedPrimary = scoreFromWeights(primary, motion.matchWeights?.primaryObjective)
+  const weightedSecondary = secondary
+    ?.map((obj) => scoreFromWeights(obj, motion.matchWeights?.primaryObjective))
+    .find((score): score is number => typeof score === "number")
+
+  if (typeof weightedPrimary === "number") return weightedPrimary
+  if (typeof weightedSecondary === "number") return weightedSecondary
+
   if (motion.bestForObjectives.includes(primary)) return 100
   if (secondary && secondary.some((obj) => motion.bestForObjectives.includes(obj))) {
     return 75
@@ -114,15 +161,31 @@ function computeObjectiveFit(motion: MotionConfig, primary: GtmObjective, second
   return 40
 }
 
-function computeSizeFit(motion: MotionConfig, size: CompanySize): number {
-  if (motion.bestForSizes.includes(size)) return 100
-  if (motion.bestForSizes.some((s) => isAdjacentSize(size, s))) {
-    return 70
+function computeSizeFit(
+  motion: MotionConfig,
+  size: CompanySize,
+  targetSize: CompanySize | undefined,
+): { companySizeFit: number; targetSizeFit?: number } {
+  const weightedCompanySize = scoreFromWeights(size, motion.matchWeights?.companySize)
+  const weightedTargetSize = scoreFromWeights(targetSize, motion.matchWeights?.targetCompanySize)
+
+  let companySizeFit = 40
+  if (typeof weightedCompanySize === "number") {
+    companySizeFit = weightedCompanySize
+  } else if (motion.bestForSizes.includes(size)) {
+    companySizeFit = 100
+  } else if (motion.bestForSizes.some((s) => isAdjacentSize(size, s))) {
+    companySizeFit = 70
   }
-  return 40
+
+  const targetSizeFit = weightedTargetSize
+  return { companySizeFit, targetSizeFit }
 }
 
 function computeAcvFit(motion: MotionConfig, acv: AcvBand): number {
+  const weightedAcv = scoreFromWeights(acv, motion.matchWeights?.acvBand)
+  if (typeof weightedAcv === "number") return weightedAcv
+
   // Use motion-specific affinity matrix for differentiated scoring
   const affinityScores = ACV_MOTION_AFFINITY[motion.id]
   if (affinityScores) {
@@ -136,14 +199,35 @@ function computeAcvFit(motion: MotionConfig, acv: AcvBand): number {
   return 40
 }
 
+function derivePersonaBucket(personas: string[]): "low" | "medium" | "high" {
+  const count = personas.length
+  if (count <= 2) return "low"
+  if (count <= 4) return "medium"
+  return "high"
+}
+
 function computePersonaFit(motion: MotionConfig, personas: string[]): number {
-  if (!motion.bestForPersonas.length) return 60
+  const personaBucket = derivePersonaBucket(personas)
+  const weightedPersonaCount = motion.matchWeights?.personaCount?.[personaBucket]
+
   const normalizedPersonas = personas.map((p) => p.toLowerCase())
   const matches = motion.bestForPersonas.filter((p) => normalizedPersonas.includes(p.toLowerCase())).length
-  if (matches === 0) return 20
-  const ratio = matches / motion.bestForPersonas.length
-  const score = ratio * 100
-  return clamp(score, 40, 100)
+  const ratio = motion.bestForPersonas.length ? matches / motion.bestForPersonas.length : 0
+  const baseScore = motion.bestForPersonas.length === 0 ? 60 : clamp(ratio * 100, 20, 100)
+
+  if (typeof weightedPersonaCount === "number") {
+    return clampPercent((baseScore + weightedPersonaCount) / 2)
+  }
+
+  return baseScore
+}
+
+function computeIndustryFit(motion: MotionConfig, industry?: string): number | undefined {
+  return scoreFromWeights(industry, motion.matchWeights?.industry)
+}
+
+function computeGeoFit(motion: MotionConfig, geo?: string): number | undefined {
+  return scoreFromWeights(geo, motion.matchWeights?.targetMarketGeography)
 }
 
 // ---- Dynamic Impact Multiplier Helpers ----
@@ -168,6 +252,7 @@ function getMotionFitMultiplier(fitScore: number): number {
 function getMarketContextMultiplier(inputs: SelectorInputs): number {
   const acv = inputs.acvBand
   const geo = inputs.targetMarketGeography
+  const normalizedGeo = geo?.toLowerCase()
 
   // ACV multiplier: high ACV deals have more potential impact
   let acvMultiplier = 1.0
@@ -177,18 +262,16 @@ function getMarketContextMultiplier(inputs: SelectorInputs): number {
 
   // Geography multiplier: regional nuances
   let geoMultiplier = 1.0
-  if (!geo || geo.toLowerCase() === "global") {
+  if (!geo || normalizedGeo === "global") {
     geoMultiplier = 1.0
-  } else if (geo === "North America") {
+  } else if (normalizedGeo === "north-america" || geo === "North America") {
     geoMultiplier = 1.0
-  } else if (geo === "EMEA") {
+  } else if (normalizedGeo === "emea" || geo === "EMEA" || normalizedGeo === "europe") {
     geoMultiplier = 1.0
-  } else if (geo === "APAC") {
+  } else if (normalizedGeo === "apac" || geo === "APAC") {
     geoMultiplier = 0.95
-  } else if (geo === "LATAM") {
+  } else if (normalizedGeo === "latam" || geo === "LATAM") {
     geoMultiplier = 1.05
-  } else if (geo === "Europe") {
-    geoMultiplier = 1.0
   }
 
   return acvMultiplier * geoMultiplier
@@ -322,11 +405,31 @@ export function scoreMotion(motion: MotionConfig, inputs: SelectorInputs): Motio
   const objectiveFit = inputs.primaryObjective
     ? computeObjectiveFit(motion, inputs.primaryObjective, inputs.secondaryObjectives)
     : 50 // neutral if not set
-  const sizeFit = computeSizeFit(motion, inputs.companySize)
+  const { companySizeFit: sizeFit, targetSizeFit } = computeSizeFit(
+    motion,
+    inputs.companySize,
+    inputs.targetCompanySize,
+  )
   const acvFit = inputs.acvBand ? computeAcvFit(motion, inputs.acvBand) : 50 // neutral if not set
   const personaFit = computePersonaFit(motion, inputs.personas)
+  const industryFit = computeIndustryFit(motion, inputs.targetIndustry || inputs.industry)
+  const geoFit = computeGeoFit(motion, inputs.targetMarketGeography)
 
-  const fitScore = round(0.35 * objectiveFit + 0.25 * sizeFit + 0.25 * acvFit + 0.15 * personaFit)
+  const fitComponents: { score: number; weight: number }[] = [
+    { score: objectiveFit, weight: 0.35 },
+    { score: sizeFit, weight: 0.2 },
+    { score: acvFit, weight: 0.2 },
+    { score: personaFit, weight: 0.15 },
+  ]
+
+  if (typeof targetSizeFit === "number") fitComponents.push({ score: targetSizeFit, weight: 0.1 })
+  if (typeof industryFit === "number") fitComponents.push({ score: industryFit, weight: 0.1 })
+  if (typeof geoFit === "number") fitComponents.push({ score: geoFit, weight: 0.1 })
+
+  const totalWeight = fitComponents.reduce((sum, item) => sum + item.weight, 0)
+  const fitScore = round(
+    fitComponents.reduce((sum, item) => sum + item.score * item.weight, 0) / Math.max(totalWeight, 0.0001),
+  )
 
   const timeCompressionDelta = calcTimeCompressionDelta(motion.recommendedHorizonMonths, inputs.timeHorizonMonths)
   const segmentComplexityDelta = calcSegmentComplexityDelta(inputs)
@@ -356,8 +459,11 @@ export function scoreMotion(motion: MotionConfig, inputs: SelectorInputs): Motio
     matchPercent,
     objectiveFit: round(objectiveFit),
     sizeFit: round(sizeFit),
+    targetSizeFit: typeof targetSizeFit === "number" ? round(targetSizeFit) : undefined,
     acvFit: round(acvFit),
     personaFit: round(personaFit),
+    industryFit: typeof industryFit === "number" ? round(industryFit) : undefined,
+    geoFit: typeof geoFit === "number" ? round(geoFit) : undefined,
     fitScore,
     motionFitMultiplier,
     marketContextMultiplier,
@@ -422,6 +528,7 @@ export function mapAcvToScoring(value: string): AcvBand | undefined {
 
 export function mapCompanySizeToScoring(value: string): CompanySize {
   const sizeMap: Record<string, CompanySize> = {
+    startup: "smb",
     smb: "smb",
     "mid-market": "mid",
     enterprise: "enterprise",
