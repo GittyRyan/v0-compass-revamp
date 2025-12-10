@@ -95,6 +95,8 @@ import {
   formatPlanTime,
 } from "@/lib/gtm-plans"
 import { generateGtmStrategyForPlan } from "@/lib/strategy-service"
+import { buildGtmPlanPreview, type GtmPlanPreview } from "@/lib/gtm-preview"
+import { GtmPlanPreviewComponent } from "@/components/compass/gtm-plan-preview"
 
 const motionMetadata: Record<
   MotionId,
@@ -701,6 +703,19 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
     [motionScores],
   )
 
+  const preview = useMemo<GtmPlanPreview | null>(() => {
+    if (!selectedMotion) return null
+    const motionConfig = MOTION_CONFIGS.find((m) => m.id === selectedMotion)
+    if (!motionConfig) return null
+    const scores = scoresById[selectedMotion]
+    if (!scores) return null
+    return buildGtmPlanPreview(motionConfig, selectorInputs, {
+      effort: scores.effort,
+      impact: scores.impact,
+      match: scores.matchPercent,
+    })
+  }, [selectedMotion, selectorInputs, scoresById])
+
   const handleCreatePlan = useCallback(
     (asDraft = false) => {
       if (!selectedMotion) return
@@ -790,12 +805,8 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
       return
     }
 
-    const motionConfig = MOTION_CONFIGS.find((m) => m.id === selectedMotion)
     const motionMeta = motionLibraryById[selectedMotion]
-    if (!motionConfig || !motionMeta) return
-
-    const scores = scoresById[selectedMotion]
-    if (!scores) return
+    if (!motionMeta) return
 
     setIsGenerating(true)
 
@@ -807,80 +818,94 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
         targetMarketGeography: targetMarketGeography || undefined,
         timeHorizonMonths: mapTimeHorizonToScoring(timeHorizon),
         segment: {
-          industry: industry || undefined,
-          companySize: companySize || undefined,
-          region: hqCountry || undefined,
+          companySize: mapCompanySizeToScoring(companySize),
+          acvBand: mapAcvToScoring(acvBand),
+          personas: parsePersonas(targetPersonas),
         },
         createdAt: now,
       })
 
       const shouldAutoActivate = !hasActivePlan
 
-      const newPlan: Omit<GtmPlan, "id" | "createdAt" | "updatedAt" | "tenantId"> = {
+      const newPlanResult = createPlan(planLibrary, {
         name: newPlanName,
-        status: "saved", // Always create as Published first
+        status: "saved",
         motionId: selectedMotion,
         motionName: motionMeta.name,
-        segment: {
-          industry: industry || "Not specified",
-          companySize: companySize || "Not specified",
-          region: hqCountry || "Not specified",
+        inputs: {
+          companyName,
+          companyUrl,
+          companySize: mapCompanySizeToScoring(companySize),
+          industry,
+          hqCountry,
+          targetMarketGeography,
+          targetPersonas: parsePersonas(targetPersonas),
+          primaryObjective: mapObjectiveToScoring(primaryObjective),
+          secondaryObjectives: [],
+          acvBand: mapAcvToScoring(acvBand),
+          timeHorizonMonths: mapTimeHorizonToScoring(timeHorizon),
         },
-        objective: primaryObjective || "pipeline",
-        acvBand: (mapAcvToScoring(acvBand) as "low" | "mid" | "high") || "mid",
-        personas: parsePersonas(targetPersonas),
-        effort: scores.effort,
-        impact: scores.impact,
-        matchPercent: scores.matchPercent,
-        timelineMonths: mapTimeHorizonToScoring(timeHorizon),
+        scores: scoresById[selectedMotion]
+          ? {
+              effort: scoresById[selectedMotion].effort,
+              impact: scoresById[selectedMotion].impact,
+              match: scoresById[selectedMotion].matchPercent,
+            }
+          : { effort: 50, impact: 50, match: 50 },
+      })
+
+      if (!newPlanResult.success) {
+        console.error("[GTMSelector] Failed to create plan:", newPlanResult.error)
+        toast({
+          title: "Error",
+          description: "Failed to create GTM plan.",
+          variant: "destructive",
+        })
+        return
       }
 
-      const result = createPlan(planLibrary, newPlan)
+      let updatedLibrary = newPlanResult.data
 
-      if (result.success) {
-        let updatedLibrary = result.data
-
-        if (shouldAutoActivate) {
-          // Find the newly created plan (most recent by createdAt)
-          const latestPlan = updatedLibrary.plans.reduce((latest, p) => (p.createdAt > latest.createdAt ? p : latest))
-          const promoteResult = applyStatusChange(updatedLibrary, latestPlan.id, "active")
-          if (promoteResult.success) {
-            updatedLibrary = promoteResult.data
-          }
-        }
-
-        persistLibrary(updatedLibrary)
-
-        // Find the active plan for strategy generation
-        const activePlan = getActivePlan(updatedLibrary)
-
-        if (activePlan) {
-          // Call strategy generation hook
-          const strategyResult = await generateGtmStrategyForPlan(activePlan)
-
-          if (strategyResult.success) {
-            toast({
-              title: "GTM Strategy Generated",
-              description: strategyResult.message || "Continue in Analyze Position to review details.",
-            })
-          } else {
-            toast({
-              title: "Strategy Generation Failed",
-              description: "The plan was saved but strategy generation encountered an error.",
-              variant: "destructive",
-            })
-          }
+      if (shouldAutoActivate) {
+        // Find the newly created plan (most recent by createdAt)
+        const latestPlan = updatedLibrary.plans.reduce((latest, p) => (p.createdAt > latest.createdAt ? p : latest))
+        const promoteResult = applyStatusChange(updatedLibrary, latestPlan.id, "active")
+        if (promoteResult.success) {
+          updatedLibrary = promoteResult.data
         } else {
+          console.error("[GTMSelector] Failed to auto-activate plan:", promoteResult.error)
           toast({
-            title: "Plan Published",
-            description: "Your GTM plan has been published. Set it as Active in the Plan Library to generate strategy.",
+            title: "Error",
+            description: "Failed to set the new plan as active.",
+            variant: "destructive",
           })
         }
-      } else if (result.error.type === "CAPACITY_EXCEEDED") {
-        setConfirmModal({
-          open: true,
-          type: "capacity",
-          errorStatus: result.error.status,
+      }
+
+      setPlanLibrary(updatedLibrary)
+
+      // Find the active plan for strategy generation
+      const activePlan = updatedLibrary.plans.find((p) => p.status === "active")
+      if (activePlan) {
+        // Call strategy generation hook
+        const strategyResult = await generateGtmStrategyForPlan(activePlan, preview ?? undefined)
+
+        if (strategyResult.success) {
+          toast({
+            title: "GTM Strategy Generated",
+            description: strategyResult.message || "Continue in Analyze Position to review details.",
+          })
+        } else {
+          toast({
+            title: "Strategy Generation Failed",
+            description: "The plan was saved but strategy generation encountered an error.",
+            variant: "destructive",
+          })
+        }
+      } else {
+        toast({
+          title: "Plan Saved",
+          description: "Your GTM plan has been published. Set it as Active in the Plan Library to generate strategy.",
         })
       }
     } catch (error) {
@@ -894,22 +919,24 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
       setIsGenerating(false)
     }
   }, [
-    hasRequiredInputs,
     selectedMotion,
+    hasRequiredInputs,
+    hasActivePlan,
     planLibrary,
-    persistLibrary,
-    industry,
+    companyName,
+    companyUrl,
     companySize,
+    industry,
     hqCountry,
+    targetMarketGeography,
+    targetPersonas,
     primaryObjective,
     acvBand,
-    targetPersonas,
     timeHorizon,
-    targetMarketGeography,
     scoresById,
+    preview, // Add preview to dependencies
     toast,
     motionLibraryById, // Added dependency for motionLibraryById
-    hasActivePlan,
   ])
 
   const sortedMotions = useMemo(() => {
@@ -1704,20 +1731,13 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
                   <h5 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                     AI GTM Plan Preview
                   </h5>
-                  <div className="bg-muted/50 rounded-lg p-3 space-y-2">
-                    <ul className="space-y-1.5">
-                      {(planPreviewByMotionId[selectedMotion] ?? []).map((milestone, i) => (
-                        <li key={i} className="flex items-start gap-2 text-xs text-foreground">
-                          <ChevronRight className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" />
-                          <span>{milestone}</span>
-                        </li>
-                      ))}
-                    </ul>
-                    <p className="text-xs text-muted-foreground pt-1 border-t border-border/50">
-                      Over the next <span className="font-medium text-foreground">{timeHorizon} months</span>,{" "}
-                      {planSummaryByMotionId[selectedMotion]}
-                    </p>
-                  </div>
+                  {preview ? (
+                    <GtmPlanPreviewComponent preview={preview} />
+                  ) : (
+                    <div className="bg-muted/50 rounded-lg p-3">
+                      <p className="text-xs text-muted-foreground">Select a motion to see the execution preview.</p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-3 pt-2">

@@ -2,6 +2,7 @@
 // Calls the backend/LLM via Next.js API route
 
 import type { GtmPlan } from "@/lib/gtm-plans"
+import type { GtmPlanPreview } from "@/lib/gtm-preview"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Request/Response Types
@@ -14,6 +15,7 @@ export interface StrategyGenerationRequest {
   plan: GtmPlan // Full plan as stored in the library
   tenantId: string // Tenant identifier from plan library
   source: "gtm-selector" // Where the request originated
+  preview?: GtmPlanPreview // Optional preview context for LLM
 }
 
 /**
@@ -85,13 +87,18 @@ function isStrategyGenerationResult(obj: unknown): obj is StrategyGenerationResu
  * Never throws; always returns a StrategyGenerationResult.
  *
  * @param plan - The active GTM plan to generate strategy for
+ * @param preview - Optional preview context to inform LLM generation
  * @returns Promise<StrategyGenerationResult>
  */
-export async function generateGtmStrategyForPlan(plan: GtmPlan): Promise<StrategyGenerationResult> {
+export async function generateGtmStrategyForPlan(
+  plan: GtmPlan,
+  preview?: GtmPlanPreview,
+): Promise<StrategyGenerationResult> {
   const request: StrategyGenerationRequest = {
     plan,
     tenantId: plan.tenantId,
     source: "gtm-selector",
+    preview,
   }
 
   console.log("[StrategyService] Sending strategy generation request", {
