@@ -303,7 +303,10 @@ const DEFAULT_TENANT_ID = "default_tenant"
 
 const MOCK_COMPANY_PROFILE = {
   companyName: "OmniGTM.ai",
-  companyUrl: "https://omnigtm.ai/",
+  companyUrl: "https://www.omnigtm.ai",
+  hqCountry: "ca",
+  companySize: "startup",
+  industry: "saas-tech", // Added industry to MOCK_COMPANY_PROFILE
 }
 
 const COUNTRY_OPTIONS = [
@@ -335,7 +338,7 @@ const TARGET_MARKET_GEOGRAPHY_OPTIONS = [
 ]
 
 // Define FlowType
-type FlowType = "gtm-insight" | "gtm-strategy"
+type FlowType = "gtm-insight" | "market-report" // Updated FlowType to match app-level type
 
 interface GTMSelectorTabProps {
   onActivePlanChange?: (plan: GtmPlan | null) => void
@@ -352,9 +355,11 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
   )
 
   // Company Profile
-  const [companySize, setCompanySize] = useState("mid-market")
-  const [hqCountry, setHqCountry] = useState("")
-  const [industry, setIndustry] = useState("saas-tech")
+  const [companySize, setCompanySize] = useState(() =>
+    flowType === "gtm-insight" ? MOCK_COMPANY_PROFILE.companySize : "",
+  )
+  const [hqCountry, setHqCountry] = useState(() => (flowType === "gtm-insight" ? MOCK_COMPANY_PROFILE.hqCountry : ""))
+  const [industry, setIndustry] = useState(() => (flowType === "gtm-insight" ? MOCK_COMPANY_PROFILE.industry : ""))
 
   const [targetMarketGeography, setTargetMarketGeography] = useState("")
 
@@ -402,11 +407,30 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
     if (flowType === "gtm-insight") {
       setCompanyName(MOCK_COMPANY_PROFILE.companyName)
       setCompanyUrl(MOCK_COMPANY_PROFILE.companyUrl)
+      // Set companySize and industry if they are not already set from initial state
+      if (!companySize) setCompanySize(MOCK_COMPANY_PROFILE.companySize)
+      if (!industry) setIndustry(MOCK_COMPANY_PROFILE.industry)
     } else {
       setCompanyName("")
       setCompanyUrl("")
+      // Reset companySize and industry for non-GTM-insight flows
+      setCompanySize("")
+      setIndustry("")
+      setHqCountry("")
+      setTargetMarketGeography("")
+      setTargetIndustry("")
+      setTargetCompanySize("")
+      setTargetPersonas("")
+      setPrimaryObjective("")
+      setTimeHorizon("6")
+      setAcvBand("")
+      setPrimaryOffering("")
+      setTargetBuyerStage("")
+      setBrandVoice("")
+      setSelectedMotion(null)
+      setShowWhyExpanded({})
     }
-  }, [flowType])
+  }, [flowType, companySize, industry]) // Added dependencies
 
   useEffect(() => {
     let lib = loadPlanLibrary(DEFAULT_TENANT_ID)
