@@ -107,7 +107,7 @@ const motionMetadata: Record<
     id: 1,
     drivers: [
       "Strong alignment with enterprise ICP targeting",
-      "High-intent signals detected in target accounts",
+      "High-intent signals detected in account",
       "Proven success pattern in your vertical",
     ],
     socialProof: "~72% of market leaders in your vertical use this motion.",
@@ -324,6 +324,8 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
 
   const activePlan = useMemo(() => getActivePlan(planLibrary), [planLibrary])
 
+  const hasActivePlan = useMemo(() => planLibrary.plans.some((p) => p.status === "active"), [planLibrary])
+
   useEffect(() => {
     onActivePlanChange?.(activePlan)
   }, [activePlan, onActivePlanChange])
@@ -447,100 +449,44 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
   }, [])
 
   const confirmModalAction = useCallback(() => {
-    const { type, planId, currentActivePlan, oldestArchivedPlan } = confirmModal
+    const { type, planId, currentActivePlan, oldestArchivedPlan, targetPlan } = confirmModal
 
     if (type === "switch-active" && planId && currentActivePlan) {
-      // Deactivate current, activate new
-      let lib = planLibrary
-      const deactivateResult = applyStatusChange(lib, currentActivePlan.id, "saved")
-      if (deactivateResult.success) {
-        lib = deactivateResult.data
-        const activateResult = applyStatusChange(lib, planId, "active")
+      // First archive the current active plan
+      const archiveResult = applyStatusChange(planLibrary, currentActivePlan.id, "archived")
+      if (archiveResult.success) {
+        // Then activate the new plan
+        const activateResult = applyStatusChange(archiveResult.data, planId, "active")
         if (activateResult.success) {
           persistLibrary(activateResult.data)
+          toast({
+            title: "Active Plan Switched",
+            description: `"${targetPlan?.name}" is now the active plan. Previous active plan was archived.`,
+          })
         }
       }
     } else if (type === "archive-overflow" && planId && oldestArchivedPlan) {
-      // Force archive with overflow deletion
-      const result = applyStatusChange(planLibrary, planId, "archived", { forceArchiveOverflow: true })
-      if (result.success) {
-        persistLibrary(result.data)
+      // Delete oldest archived plan, then archive
+      const deleteResult = deletePlan(planLibrary, oldestArchivedPlan.id)
+      if (deleteResult.success) {
+        const archiveResult = applyStatusChange(deleteResult.data, planId, "archived")
+        if (archiveResult.success) {
+          persistLibrary(archiveResult.data)
+        }
       }
     } else if (type === "delete" && planId) {
       const result = deletePlan(planLibrary, planId)
       if (result.success) {
         persistLibrary(result.data)
+        toast({
+          title: "Plan Deleted",
+          description: "The GTM plan was permanently deleted.",
+        })
       }
     }
 
     setConfirmModal({ open: false, type: "switch-active" })
-  }, [confirmModal, planLibrary, persistLibrary])
-
-  const handleCreatePlan = useCallback(
-    (asDraft = false) => {
-      if (!selectedMotion) return
-
-      const motionConfig = MOTION_CONFIGS.find((m) => m.id === selectedMotion)
-      const motionMeta = motionLibraryById[selectedMotion]
-      if (!motionConfig || !motionMeta) return
-
-      const scores = scoresById[selectedMotion]
-      if (!scores) return
-
-      const newPlan: Omit<GtmPlan, "id" | "createdAt" | "updatedAt" | "tenantId"> = {
-        name: generatePlanName({
-          motionName: motionMeta.name,
-          primaryObjective: primaryObjective || undefined,
-          targetMarketGeography: targetMarketGeography || undefined,
-          segment: {
-            industry: industry || undefined,
-            companySize: companySize || undefined,
-            region: hqCountry || undefined,
-          },
-          createdAt: new Date(),
-        }),
-        status: asDraft ? "draft" : "saved",
-        motionId: selectedMotion,
-        motionName: motionMeta.name,
-        segment: {
-          industry: industry || "Not specified",
-          companySize: companySize || "Not specified",
-          region: hqCountry || "Not specified",
-        },
-        objective: primaryObjective || "pipeline",
-        acvBand: (mapAcvToScoring(acvBand) as "low" | "mid" | "high") || "mid",
-        personas: parsePersonas(targetPersonas),
-        effort: scores.effort,
-        impact: scores.impact,
-        matchPercent: scores.matchPercent,
-        timelineMonths: mapTimeHorizonToScoring(timeHorizon),
-      }
-
-      const result = createPlan(planLibrary, newPlan)
-      if (result.success) {
-        persistLibrary(result.data)
-      } else if (result.error.type === "CAPACITY_EXCEEDED") {
-        setConfirmModal({
-          open: true,
-          type: "capacity",
-          errorStatus: result.error.status,
-        })
-      }
-    },
-    [
-      selectedMotion,
-      planLibrary,
-      persistLibrary,
-      industry,
-      companySize,
-      hqCountry,
-      primaryObjective,
-      acvBand,
-      targetPersonas,
-      timeHorizon,
-      targetMarketGeography, // Added missing dependency
-    ],
-  )
+  }, [confirmModal, planLibrary, persistLibrary, toast])
 
   const clampPercent = (value?: number) => Math.min(100, Math.max(0, value ?? 0))
 
@@ -645,12 +591,81 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
     [motionScores],
   )
 
+  const handleCreatePlan = useCallback(
+    (asDraft = false) => {
+      if (!selectedMotion) return
+
+      const motionConfig = MOTION_CONFIGS.find((m) => m.id === selectedMotion)
+      const motionMeta = motionLibraryById[selectedMotion]
+      if (!motionConfig || !motionMeta) return
+
+      const scores = scoresById[selectedMotion]
+      if (!scores) return
+
+      const newPlan: Omit<GtmPlan, "id" | "createdAt" | "updatedAt" | "tenantId"> = {
+        name: generatePlanName({
+          motionName: motionMeta.name,
+          primaryObjective: primaryObjective || undefined,
+          targetMarketGeography: targetMarketGeography || undefined,
+          timeHorizonMonths: mapTimeHorizonToScoring(timeHorizon),
+          segment: {
+            industry: industry || undefined,
+            companySize: companySize || undefined,
+            region: hqCountry || undefined,
+          },
+          createdAt: new Date(),
+        }),
+        status: asDraft ? "draft" : "saved",
+        motionId: selectedMotion,
+        motionName: motionMeta.name,
+        segment: {
+          industry: industry || "Not specified",
+          companySize: companySize || "Not specified",
+          region: hqCountry || "Not specified",
+        },
+        objective: primaryObjective || "pipeline",
+        acvBand: (mapAcvToScoring(acvBand) as "low" | "mid" | "high") || "mid",
+        personas: parsePersonas(targetPersonas),
+        effort: scores.effort,
+        impact: scores.impact,
+        matchPercent: scores.matchPercent,
+        timelineMonths: mapTimeHorizonToScoring(timeHorizon),
+      }
+
+      const result = createPlan(planLibrary, newPlan)
+      if (result.success) {
+        persistLibrary(result.data)
+      } else if (result.error.type === "CAPACITY_EXCEEDED") {
+        setConfirmModal({
+          open: true,
+          type: "capacity",
+          errorStatus: result.error.status,
+        })
+      }
+    },
+    [
+      selectedMotion,
+      planLibrary,
+      persistLibrary,
+      industry,
+      companySize,
+      hqCountry,
+      primaryObjective,
+      acvBand,
+      targetPersonas,
+      timeHorizon,
+      targetMarketGeography,
+      scoresById,
+      motionLibraryById, // Added missing dependency
+    ],
+  )
+
   const handleGenerateStrategy = useCallback(async () => {
-    // Guard: require inputs and selected motion
+    // Adjusted toast message for missing inputs
     if (!hasRequiredInputs) {
       toast({
-        title: "Missing Required Inputs",
-        description: "Please complete all required inputs before generating a strategy.",
+        title: "Missing Inputs",
+        description: "Please fill out all required inputs before generating a strategy.",
         variant: "destructive",
       })
       return
@@ -680,6 +695,7 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
         motionName: motionMeta.name,
         primaryObjective: primaryObjective || undefined,
         targetMarketGeography: targetMarketGeography || undefined,
+        timeHorizonMonths: mapTimeHorizonToScoring(timeHorizon),
         segment: {
           industry: industry || undefined,
           companySize: companySize || undefined,
@@ -688,10 +704,11 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
         createdAt: now,
       })
 
-      // Create or update plan as Active
+      const shouldAutoActivate = !hasActivePlan
+
       const newPlan: Omit<GtmPlan, "id" | "createdAt" | "updatedAt" | "tenantId"> = {
-        name: newPlanName, // Use generated name
-        status: "active", // Create as active plan
+        name: newPlanName,
+        status: "saved", // Always create as Published first
         motionId: selectedMotion,
         motionName: motionMeta.name,
         segment: {
@@ -711,10 +728,21 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
       const result = createPlan(planLibrary, newPlan)
 
       if (result.success) {
-        persistLibrary(result.data)
+        let updatedLibrary = result.data
 
-        // Find the newly created active plan
-        const activePlan = getActivePlan(result.data)
+        if (shouldAutoActivate) {
+          // Find the newly created plan (most recent by createdAt)
+          const latestPlan = updatedLibrary.plans.reduce((latest, p) => (p.createdAt > latest.createdAt ? p : latest))
+          const promoteResult = applyStatusChange(updatedLibrary, latestPlan.id, "active")
+          if (promoteResult.success) {
+            updatedLibrary = promoteResult.data
+          }
+        }
+
+        persistLibrary(updatedLibrary)
+
+        // Find the active plan for strategy generation
+        const activePlan = getActivePlan(updatedLibrary)
 
         if (activePlan) {
           // Call strategy generation hook
@@ -732,6 +760,11 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
               variant: "destructive",
             })
           }
+        } else {
+          toast({
+            title: "Plan Published",
+            description: "Your GTM plan has been published. Set it as Active in the Plan Library to generate strategy.",
+          })
         }
       } else if (result.error.type === "CAPACITY_EXCEEDED") {
         setConfirmModal({
@@ -762,15 +795,11 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
     acvBand,
     targetPersonas,
     timeHorizon,
+    targetMarketGeography,
     scoresById,
     toast,
-    motionLibraryById, // Added motionLibraryById
-    generatePlanName, // Added generatePlanName
-    primaryObjective, // Added primaryObjective
-    targetMarketGeography, // Added targetMarketGeography
-    companySize, // Added companySize
-    industry, // Added industry
-    hqCountry, // Added hqCountry
+    motionLibraryById,
+    hasActivePlan, // Added hasActivePlan dependency
   ])
 
   const sortedMotions = useMemo(() => {
@@ -829,6 +858,7 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
       motionName: motionMeta.name,
       primaryObjective: primaryObjective || undefined,
       targetMarketGeography: targetMarketGeography || undefined,
+      timeHorizonMonths: mapTimeHorizonToScoring(timeHorizon),
       segment: {
         industry: industry || undefined,
         companySize: companySize || undefined,
@@ -838,8 +868,8 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
     })
 
     const newPlan: Omit<GtmPlan, "id" | "createdAt" | "updatedAt" | "tenantId"> = {
-      name: newPlanName, // Use generated name
-      status: "draft", // Always draft now
+      name: newPlanName,
+      status: "draft", // Always draft
       motionId: selectedMotion,
       motionName: motionMeta.name,
       segment: {
@@ -881,10 +911,10 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
     acvBand,
     targetPersonas,
     timeHorizon,
+    targetMarketGeography, // Added missing dependency
     scoresById,
     toast,
-    motionLibraryById, // Added motionLibraryById
-    generatePlanName, // Added generatePlanName
+    motionLibraryById, // Added missing dependency
   ])
 
   return (
@@ -1540,7 +1570,7 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
                       <Clock className="h-3.5 w-3.5" />
                       Timeline
                     </Label>
-                    <div className="flex rounded-lg border bg-muted/30 p-0.5">
+                    <div className="flex rounded-lg border bg-muted/50 p-0.5">
                       {["3", "6", "9", "12"].map((months) => (
                         <button
                           key={months}

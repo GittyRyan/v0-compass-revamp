@@ -45,6 +45,7 @@ export interface PlanNamingContext {
   motionName: string
   primaryObjective?: string // e.g. "pipeline", "expand-accounts"
   targetMarketGeography?: string // e.g. "North America", "Global"
+  timeHorizonMonths?: 3 | 6 | 9 | 12 // from selector inputs
   segment?: {
     industry?: string // "Technology / SaaS"
     companySize?: string // "Mid-Market", "Enterprise"
@@ -53,12 +54,36 @@ export interface PlanNamingContext {
   createdAt?: Date
 }
 
+function geographyToCode(geo: string): string {
+  const normalized = geo.trim().toLowerCase()
+  switch (normalized) {
+    case "north america":
+      return "NA"
+    case "emea":
+      return "EMEA"
+    case "apac":
+      return "APAC"
+    case "latam":
+      return "LATAM"
+    case "europe":
+      return "EU"
+    case "global":
+      return "" // No geo code for Global
+    default:
+      // Return first letters for unknown regions
+      return geo
+        .split(/\s+/)
+        .map((w) => w[0]?.toUpperCase() || "")
+        .join("")
+  }
+}
+
 function objectiveToLabel(objective: string): string {
   switch (objective) {
     case "pipeline":
       return "Pipeline Growth"
     case "expand-accounts":
-      return "Account Expansion"
+      return "Customer Expansion"
     case "market_expansion":
       return "Market Expansion"
     case "competitive_positioning":
@@ -69,29 +94,25 @@ function objectiveToLabel(objective: string): string {
 }
 
 export function generatePlanName(ctx: PlanNamingContext): string {
-  const pieces: string[] = []
+  const now = ctx.createdAt ?? new Date()
+  const months = ctx.timeHorizonMonths ?? 3
 
-  // 1) Motion name (required, anchor)
-  pieces.push(ctx.motionName.trim())
+  // Calculate end date and quarter
+  const end = new Date(now)
+  end.setMonth(end.getMonth() + months)
+  const quarter = Math.floor(end.getMonth() / 3) + 1
+  const timeframeLabel = `Q${quarter} ${end.getFullYear()}`
 
-  // 2) Objective (if present) – use a readable label, not raw slug
-  if (ctx.primaryObjective) {
-    pieces.push(objectiveToLabel(ctx.primaryObjective))
-  }
+  // Geography code (empty string for Global)
+  const geoCode = ctx.targetMarketGeography ? geographyToCode(ctx.targetMarketGeography) : ""
 
-  // 3) Geography hint if not Global
-  const geo = ctx.targetMarketGeography?.trim()
-  if (geo && geo.toLowerCase() !== "global") {
-    pieces.push(geo)
-  }
+  // Goal label: prefer objective, fall back to motionName
+  const goalLabel = ctx.primaryObjective ? objectiveToLabel(ctx.primaryObjective) : ctx.motionName
 
-  // 4) Optional fall-back date stamp for uniqueness
-  if (ctx.createdAt) {
-    const date = ctx.createdAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })
-    pieces.push(date)
-  }
-
-  return pieces.filter(Boolean).join(" · ")
+  return [timeframeLabel, geoCode, goalLabel]
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .join(" ")
 }
 
 // Capacity limits
@@ -193,8 +214,8 @@ export function createPlan(
   const counts = countByStatus(lib)
   const status = plan.status || "draft"
 
-  // Check capacity (except for active which has special handling)
-  if (status !== "active" && counts[status] >= LIMITS[status]) {
+  // Check capacity for all statuses including active
+  if (counts[status] >= LIMITS[status]) {
     return {
       success: false,
       error: { type: "CAPACITY_EXCEEDED", status, limit: LIMITS[status], current: counts[status] },
@@ -212,17 +233,10 @@ export function createPlan(
     archivedAt: status === "archived" ? timestamp : null,
   }
 
-  // If creating as active, deactivate current active
-  let updatedPlans = lib.plans
-  if (status === "active") {
-    updatedPlans = lib.plans.map((p) =>
-      p.status === "active" ? { ...p, status: "saved" as PlanStatus, updatedAt: timestamp } : p,
-    )
-  }
-
+  // Active switching is now only done via applyStatusChange (user-driven)
   return {
     success: true,
-    data: { ...lib, plans: [...updatedPlans, newPlan] },
+    data: { ...lib, plans: [...lib.plans, newPlan] },
   }
 }
 
