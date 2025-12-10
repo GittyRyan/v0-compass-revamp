@@ -1,12 +1,33 @@
 // lib/gtm-scoring.ts
 
+/**
+ * GTM Scoring Engine
+ *
+ * Scores GTM motions based on user-provided selector inputs.
+ * The scoring model combines:
+ * - Fit score (objective, size, ACV, persona alignment)
+ * - Dynamic Impact (base impact × fit/market/horizon multipliers)
+ * - Effort V2 (base effort + time/segment/persona/ops deltas)
+ * - Match % = weighted combination of fit, impact, and effort
+ */
+
 // ---- Types ----
 
 export type CompanySize = "smb" | "mid" | "enterprise"
 export type GtmObjective = "pipeline" | "awareness" | "expansion" | "new_market"
 export type AcvBand = "low" | "mid" | "high"
 
-export type MotionId = "outbound_abm" | "plg" | "vertical_motion" | "inbound_engine" | "customer_expansion"
+export type MotionId =
+  | "plg"
+  | "sales_led"
+  | "outbound_abm"
+  | "inbound_demand_gen"
+  | "hybrid_plg_sales"
+  | "partner_led"
+  | "ecosystem_led"
+  | "community_led"
+  | "event_led"
+  | "vertical_specific"
 
 export type OpsIntensity = "light" | "moderate" | "heavy"
 
@@ -16,6 +37,7 @@ export interface SelectorInputs {
   hqCountry?: string
   targetMarketGeography?: string
   companySize: CompanySize
+  industry?: string // Added industry field for vertical-specific scoring
   primaryObjective?: GtmObjective
   secondaryObjectives?: GtmObjective[]
   acvBand?: AcvBand
@@ -85,18 +107,27 @@ const isAdjacentAcv = (a: AcvBand, b: AcvBand): boolean => {
   return false
 }
 
-// PLG and Inbound favor low ACV (high velocity), ABM/Vertical/Expansion favor high ACV
 const ACV_MOTION_AFFINITY: Record<MotionId, Record<AcvBand, number>> = {
-  // PLG: strong for low ACV, decent for mid, weak for high
-  plg: { low: 95, mid: 75, high: 45 },
-  // Inbound: strong for low ACV, decent for mid, weak for high
-  inbound_engine: { low: 90, mid: 80, high: 50 },
+  // PLG: strong for low ACV (high velocity), decent for mid, weak for high
+  plg: { low: 95, mid: 75, high: 40 },
+  // Sales-Led: weak for low, decent for mid, strong for high
+  sales_led: { low: 40, mid: 70, high: 95 },
   // Outbound ABM: weak for low, decent for mid, strong for high
-  outbound_abm: { low: 45, mid: 75, high: 95 },
-  // Vertical: weak for low, decent for mid, strong for high
-  vertical_motion: { low: 50, mid: 70, high: 92 },
-  // Customer Expansion: moderate for low, good for mid, strong for high
-  customer_expansion: { low: 55, mid: 80, high: 90 },
+  outbound_abm: { low: 35, mid: 75, high: 95 },
+  // Inbound Demand Gen: strong for low/mid, weaker for high
+  inbound_demand_gen: { low: 90, mid: 85, high: 55 },
+  // Hybrid PLG + Sales: good across the board, best for mid
+  hybrid_plg_sales: { low: 75, mid: 95, high: 70 },
+  // Partner-Led: moderate for low, good for mid, strong for high
+  partner_led: { low: 50, mid: 75, high: 90 },
+  // Ecosystem-Led: good for low/mid (developer tools), decent for high
+  ecosystem_led: { low: 80, mid: 85, high: 70 },
+  // Community-Led: strong for low/mid, weaker for high
+  community_led: { low: 90, mid: 80, high: 50 },
+  // Event-Led: moderate for low, good for mid, strong for high
+  event_led: { low: 55, mid: 80, high: 90 },
+  // Vertical-Specific: weak for low, decent for mid, strong for high
+  vertical_specific: { low: 45, mid: 75, high: 95 },
 }
 
 // ---- Import library-driven motion configs ----
@@ -148,34 +179,23 @@ function computePersonaFit(motion: MotionConfig, personas: string[]): number {
 
 // ---- Dynamic Impact Multiplier Helpers ----
 
-/**
- * Computes a multiplier based on how well the motion fits the user's
- * objective, personas, and company size (derived from fitScore).
- * Range: 0.8 (poor) to 1.3 (perfect)
- */
 function getMotionFitMultiplier(fitScore: number): number {
-  if (fitScore >= 80) return 1.3 // perfect alignment
-  if (fitScore >= 65) return 1.15 // strong
-  if (fitScore >= 45) return 1.0 // neutral
-  if (fitScore >= 30) return 0.9 // weak
-  return 0.8 // poor
+  if (fitScore >= 80) return 1.3
+  if (fitScore >= 65) return 1.15
+  if (fitScore >= 45) return 1.0
+  if (fitScore >= 30) return 0.9
+  return 0.8
 }
 
-/**
- * Computes a multiplier based on ACV band and target geography.
- * Range: ~0.85 to ~1.25
- */
 function getMarketContextMultiplier(inputs: SelectorInputs): number {
   const acv = inputs.acvBand
   const geo = inputs.targetMarketGeography
 
-  // ACV multiplier: high ACV deals have more potential impact
   let acvMultiplier = 1.0
   if (acv === "high") acvMultiplier = 1.2
   else if (acv === "mid") acvMultiplier = 1.0
   else if (acv === "low") acvMultiplier = 0.9
 
-  // Geography multiplier: regional nuances
   let geoMultiplier = 1.0
   if (!geo || geo.toLowerCase() === "global") {
     geoMultiplier = 1.0
@@ -194,11 +214,6 @@ function getMarketContextMultiplier(inputs: SelectorInputs): number {
   return acvMultiplier * geoMultiplier
 }
 
-/**
- * Computes a multiplier based on execution timeline.
- * Longer horizons allow motions to compound, increasing potential impact.
- * Range: 0.9 (3 months) to 1.15 (12 months)
- */
 function getExecutionHorizonMultiplier(inputs: SelectorInputs): number {
   const months = inputs.timeHorizonMonths
 
@@ -218,30 +233,20 @@ function getExecutionHorizonMultiplier(inputs: SelectorInputs): number {
 
 // ---- Effort V2 Helper Functions ----
 
-/**
- * Calculates time compression delta based on motion's recommended horizon
- * vs user-selected timeline. Compressing a motion into less time = more effort.
- * Range: -10 (generous runway) to +20 (highly compressed)
- */
 function calcTimeCompressionDelta(recommendedHorizonMonths: number, selectedHorizonMonths: number | undefined): number {
   if (!selectedHorizonMonths || selectedHorizonMonths <= 0) {
-    return 0 // neutral if missing
+    return 0
   }
 
   const ratio = recommendedHorizonMonths / selectedHorizonMonths
 
-  if (ratio >= 1.5) return 20 // much more aggressive than ideal (e.g., 9-mo motion in 3 months)
-  if (ratio >= 1.1) return 10 // somewhat compressed
-  if (ratio >= 0.9 && ratio <= 1.1) return 0 // roughly aligned
-  if (ratio >= 0.7) return -5 // more time than needed
-  return -10 // very generous runway
+  if (ratio >= 1.5) return 20
+  if (ratio >= 1.1) return 10
+  if (ratio >= 0.9 && ratio <= 1.1) return 0
+  if (ratio >= 0.7) return -5
+  return -10
 }
 
-/**
- * Calculates segment complexity delta based on company size and geography.
- * Enterprise + Global = most complex. SMB + single region = simplest.
- * Range: 0 to +20 (capped)
- */
 function calcSegmentComplexityDelta(inputs: SelectorInputs): number {
   let companySizeDelta = 0
   const size = inputs.companySize
@@ -251,7 +256,6 @@ function calcSegmentComplexityDelta(inputs: SelectorInputs): number {
   } else if (size === "enterprise") {
     companySizeDelta = 10
   }
-  // smb = 0
 
   let geoDelta = 0
   const geo = inputs.targetMarketGeography
@@ -261,18 +265,12 @@ function calcSegmentComplexityDelta(inputs: SelectorInputs): number {
   } else if (geo.toLowerCase() === "global") {
     geoDelta = 10
   } else {
-    // broad single-region markets (NA, EMEA, APAC, LATAM, Europe)
     geoDelta = 5
   }
 
   return Math.min(20, companySizeDelta + geoDelta)
 }
 
-/**
- * Calculates persona complexity delta based on number and seniority of personas.
- * More personas = more stakeholders to coordinate. Senior personas = higher stakes.
- * Range: 0 to +20 (capped)
- */
 function calcPersonaComplexityDelta(inputs: SelectorInputs): number {
   const personas = inputs.personas ?? []
   const count = personas.length
@@ -295,11 +293,6 @@ function calcPersonaComplexityDelta(inputs: SelectorInputs): number {
   return Math.min(20, base)
 }
 
-/**
- * Calculates motion ops delta based on opsIntensity and channelCount.
- * Heavy orchestration + many channels = more effort.
- * Range: 0 to +20 (capped)
- */
 function calcMotionOpsDelta(motion: MotionConfig): number {
   let opsDelta = 0
   if (motion.opsIntensity === "moderate") opsDelta = 5
@@ -321,9 +314,9 @@ function calcMotionOpsDelta(motion: MotionConfig): number {
 export function scoreMotion(motion: MotionConfig, inputs: SelectorInputs): MotionScoreBreakdown {
   const objectiveFit = inputs.primaryObjective
     ? computeObjectiveFit(motion, inputs.primaryObjective, inputs.secondaryObjectives)
-    : 50 // neutral if not set
+    : 50
   const sizeFit = computeSizeFit(motion, inputs.companySize)
-  const acvFit = inputs.acvBand ? computeAcvFit(motion, inputs.acvBand) : 50 // neutral if not set
+  const acvFit = inputs.acvBand ? computeAcvFit(motion, inputs.acvBand) : 50
   const personaFit = computePersonaFit(motion, inputs.personas)
 
   const fitScore = round(0.35 * objectiveFit + 0.25 * sizeFit + 0.25 * acvFit + 0.15 * personaFit)
@@ -407,11 +400,9 @@ export function mapObjectiveToScoring(value: string): GtmObjective | undefined {
 export function mapAcvToScoring(value: string): AcvBand | undefined {
   if (!value || value.trim() === "") return undefined
   const acvMap: Record<string, AcvBand> = {
-    // First-class UI values (low/mid/high)
     low: "low",
     mid: "mid",
     high: "high",
-    // Legacy keys for backward compatibility
     smb: "low",
     "mid-market": "mid",
     enterprise: "high",

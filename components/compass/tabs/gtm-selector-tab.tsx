@@ -64,7 +64,8 @@ import {
   Upload,
   FileInput,
 } from "lucide-react"
-import { MOTION_CONFIGS, MOTION_LIBRARY, type MotionId, type GtmMotion } from "@/lib/gtm-motions"
+import { MOTION_CONFIGS, MOTION_LIBRARY, type GtmMotion } from "@/lib/gtm-motions"
+import type { MotionId } from "@/lib/gtm-scoring"
 import {
   scoreAllMotions,
   mapCompanySizeToScoring,
@@ -86,12 +87,12 @@ import {
   getStatusLabel,
   countByStatus,
   getSeedPlanLibrary,
-  generatePlanName, // Import generatePlanName
-  renamePlan, // Import renamePlan
+  generatePlanName,
+  renamePlan,
   type GtmPlan,
   type GtmPlanLibrary,
   type PlanStatus,
-  formatPlanTime, // Import formatPlanTime
+  formatPlanTime,
 } from "@/lib/gtm-plans"
 import { generateGtmStrategyForPlan } from "@/lib/strategy-service"
 
@@ -103,99 +104,194 @@ const motionMetadata: Record<
     socialProof: string
   }
 > = {
-  outbound_abm: {
+  plg: {
     id: 1,
+    drivers: [
+      "Low friction adoption path for SMB and mid-market segments",
+      "Product-market fit enables self-serve conversion",
+      "Viral coefficient and network effects potential identified",
+      "Usage-based pricing aligns value with customer success",
+    ],
+    socialProof: "~67% of high-growth SaaS companies leverage PLG as a primary acquisition motion.",
+  },
+  sales_led: {
+    id: 2,
+    drivers: [
+      "High ACV deals require consultative selling approach",
+      "Complex buying committees benefit from human guidance",
+      "Long sales cycles need dedicated relationship management",
+      "Enterprise security and compliance discussions require expert handling",
+    ],
+    socialProof: "~78% of enterprise software deals are closed through direct sales engagement.",
+  },
+  outbound_abm: {
+    id: 3,
     drivers: [
       "Strong alignment with enterprise ICP targeting",
       "High-intent signals detected in target accounts",
-      "Proven success pattern in your vertical",
+      "Multi-threaded approach reaches entire buying committee",
+      "Personalized outreach improves response rates in strategic accounts",
     ],
-    socialProof: "~72% of market leaders in your vertical use this motion.",
+    socialProof: "~72% of B2B companies using ABM report higher ROI than other marketing initiatives.",
   },
-  plg: {
-    id: 2,
-    drivers: [
-      "Low friction adoption path for SMB segment",
-      "Strong product-market fit indicators",
-      "Viral coefficient potential identified",
-    ],
-    socialProof: "~67% of high-growth SaaS companies leverage PLG.",
-  },
-  vertical_motion: {
-    id: 3,
-    drivers: [
-      "Deep expertise in Financial Services sector",
-      "Regulatory compliance as differentiator",
-      "Strong case study evidence",
-    ],
-    socialProof: "~58% of successful vertical plays show 2x faster sales cycles.",
-  },
-  inbound_engine: {
+  inbound_demand_gen: {
     id: 4,
     drivers: [
-      "Scalable demand capture infrastructure",
-      "Content-driven lead generation",
-      "Marketing automation leverage",
+      "Scalable demand capture through content and SEO",
+      "Marketing automation enables efficient lead nurturing",
+      "Lower CAC than outbound for high-volume segments",
+      "Thought leadership builds trust before sales engagement",
     ],
-    socialProof: "~61% of B2B SaaS companies rely on inbound as primary demand source.",
+    socialProof: "~61% of B2B companies rely on inbound as their primary demand generation source.",
   },
-  customer_expansion: {
+  hybrid_plg_sales: {
     id: 5,
     drivers: [
-      "Existing customer relationships as foundation",
-      "Usage data signals expansion opportunities",
-      "Lower CAC than new.logo acquisition",
+      "Product-led acquisition combined with sales-assisted expansion",
+      "PQL signals enable targeted sales outreach",
+      "Self-serve entry lowers friction while sales captures upsell",
+      "Best of both worlds for mid-market segment",
     ],
-    socialProof: "~85% of revenue for mature SaaS comes from expansion.",
+    socialProof: "~54% of PLG companies add sales assist to accelerate monetization.",
+  },
+  partner_led: {
+    id: 6,
+    drivers: [
+      "Leverage partner relationships for geographic expansion",
+      "SI and reseller networks provide trusted distribution",
+      "Partners bring domain expertise in regulated industries",
+      "Co-selling accelerates deal velocity in new markets",
+    ],
+    socialProof: "~65% of enterprise software revenue flows through partner channels.",
+  },
+  ecosystem_led: {
+    id: 7,
+    drivers: [
+      "API and integration ecosystem creates switching costs",
+      "Marketplace presence drives organic discovery",
+      "Developer adoption compounds through community effects",
+      "Platform network effects increase customer lifetime value",
+    ],
+    socialProof: "~70% of platform companies attribute growth to ecosystem-driven adoption.",
+  },
+  community_led: {
+    id: 8,
+    drivers: [
+      "User community drives organic awareness and adoption",
+      "Peer recommendations have high conversion rates",
+      "Community feedback accelerates product-market fit",
+      "Developer relations and advocacy reduce CAC",
+    ],
+    socialProof: "~58% of developer tools companies cite community as top acquisition channel.",
+  },
+  event_led: {
+    id: 9,
+    drivers: [
+      "High-touch engagement builds trust with enterprise buyers",
+      "Industry conferences provide concentrated ICP access",
+      "Owned events establish thought leadership positioning",
+      "Face-to-face interactions accelerate deal progression",
+    ],
+    socialProof: "~62% of B2B marketers rate events as their most effective lead generation channel.",
+  },
+  vertical_specific: {
+    id: 10,
+    drivers: [
+      "Industry-specific messaging resonates with vertical buyers",
+      "Compliance and regulatory expertise as differentiator",
+      "Vertical case studies and references accelerate trust",
+      "Specialized sales plays improve win rates",
+    ],
+    socialProof: "~58% of successful vertical plays show 2x faster sales cycles vs. horizontal approach.",
   },
 }
 
 const expectedOutcomesByMotionId: Record<MotionId, string[]> = {
-  outbound_abm: ["+18% SQL Volume", "+12% ACV", "-15% Sales Cycle"],
-  plg: ["+25% Sign-ups", "+15% PQL-to-SQL", "-10% CAC"],
-  vertical_motion: ["+20% Win Rate", "+15% Deal Size", "-12% Sales Cycle"],
-  inbound_engine: ["+30% Inbound MQLs", "+20% Organic Traffic", "-8% CAC"],
-  customer_expansion: ["+10% NRR", "+18% Expansion Revenue", "-15% Churn"],
+  plg: ["+25% Product-Qualified Signups", "+15% Self-Serve Activation Rate", "-10% Customer Acquisition Cost"],
+  sales_led: ["+20% Win Rate on Enterprise Deals", "+15% Average Contract Value", "-12% Sales Cycle Length"],
+  outbound_abm: ["+18% SQL Volume from Target Accounts", "+12% ACV on ABM Deals", "-15% Sales Cycle Length"],
+  inbound_demand_gen: ["+30% Inbound MQL Volume", "+20% Organic Traffic Growth", "-8% Cost per Lead"],
+  hybrid_plg_sales: ["+22% PQL-to-SQL Conversion", "+18% Expansion Revenue", "-12% Blended CAC"],
+  partner_led: ["+25% Partner-Sourced Pipeline", "+15% Geographic Coverage", "-20% Market Entry Cost"],
+  ecosystem_led: ["+30% Integration-Driven Signups", "+20% Platform Stickiness", "+15% Developer Adoption"],
+  community_led: ["+35% Organic Referral Traffic", "+20% Community-Driven Signups", "-25% CAC"],
+  event_led: ["+28% Event-Sourced Pipeline", "+15% Brand Awareness Lift", "+12% Enterprise Engagement"],
+  vertical_specific: ["+20% Vertical Win Rate", "+15% Deal Size in Target Vertical", "-12% Sales Cycle Length"],
 }
 
 const planPreviewByMotionId: Record<MotionId, string[]> = {
-  outbound_abm: [
-    "0–30 days: Define ICP and build target account list",
-    "31–60 days: Launch 2–3 outbound sequences across email and LinkedIn",
-    "61–90 days: Optimize messaging and expand to lookalike accounts",
-  ],
   plg: [
     "0–30 days: Optimize signup flow and onboarding experience",
     "31–60 days: Implement in-product growth loops and referral mechanics",
     "61–90 days: Launch self-serve upgrade paths and usage-based triggers",
   ],
-  vertical_motion: [
-    "0–30 days: Map vertical-specific pain points and compliance requirements",
-    "31–60 days: Develop tailored messaging and case studies for the vertical",
-    "61–90 days: Engage vertical-specific channels and events",
+  sales_led: [
+    "0–30 days: Define ICP and build qualified target account list",
+    "31–60 days: Enable sales team with playbooks and competitive positioning",
+    "61–90 days: Launch structured outreach cadences and demo workflows",
   ],
-  inbound_engine: [
+  outbound_abm: [
+    "0–30 days: Define ICP and build target account list with intent data",
+    "31–60 days: Launch multi-channel outbound sequences (email, LinkedIn, calls)",
+    "61–90 days: Optimize messaging and expand to lookalike accounts",
+  ],
+  inbound_demand_gen: [
     "0–30 days: Audit content gaps and SEO opportunities",
     "31–60 days: Launch content production and distribution campaigns",
     "61–90 days: Optimize conversion paths and lead nurture sequences",
   ],
-  customer_expansion: [
-    "0–30 days: Identify expansion signals from usage data",
-    "31–60 days: Launch targeted upsell and cross-sell campaigns",
-    "61–90 days: Implement customer success playbooks for retention",
+  hybrid_plg_sales: [
+    "0–30 days: Define PQL criteria and sales handoff triggers",
+    "31–60 days: Enable sales team on product-led approach and expansion plays",
+    "61–90 days: Launch targeted outreach to high-intent PQLs",
+  ],
+  partner_led: [
+    "0–30 days: Identify and recruit strategic partners in target markets",
+    "31–60 days: Enable partners with training, content, and co-selling processes",
+    "61–90 days: Launch joint marketing campaigns and partner deal registration",
+  ],
+  ecosystem_led: [
+    "0–30 days: Audit integration opportunities and developer experience",
+    "31–60 days: Launch key integrations and marketplace listings",
+    "61–90 days: Build developer community and expand API adoption programs",
+  ],
+  community_led: [
+    "0–30 days: Establish community platform and engagement strategy",
+    "31–60 days: Launch content programs and community-driven events",
+    "61–90 days: Scale advocacy programs and user-generated content initiatives",
+  ],
+  event_led: [
+    "0–30 days: Identify priority events and build event calendar",
+    "31–60 days: Develop event content, booth strategy, and follow-up processes",
+    "61–90 days: Execute events and optimize post-event nurture sequences",
+  ],
+  vertical_specific: [
+    "0–30 days: Map vertical-specific pain points and compliance requirements",
+    "31–60 days: Develop tailored messaging, case studies, and sales plays",
+    "61–90 days: Engage vertical-specific channels, events, and partnerships",
   ],
 }
 
 const planSummaryByMotionId: Record<MotionId, string> = {
+  plg: "This plan emphasizes product-led acquisition with self-serve onboarding, viral loops, and usage-based conversion triggers to drive efficient growth.",
+  sales_led:
+    "This plan focuses on consultative selling with a dedicated sales team, structured outreach, and high-touch engagement for complex enterprise deals.",
   outbound_abm:
-    "this plan focuses on 200–300 target accounts, multi-threaded into VP Sales/CRO with outbound email and LinkedIn as primary channels.",
-  plg: "this plan emphasizes product-led acquisition with self-serve onboarding, viral loops, and usage-based conversion triggers.",
-  vertical_motion:
-    "this plan targets deep vertical penetration with tailored messaging, compliance positioning, and industry-specific case studies.",
-  inbound_engine:
-    "this plan builds scalable demand capture through content marketing, SEO optimization, and automated lead nurturing.",
-  customer_expansion:
-    "this plan maximizes existing customer value through usage-based expansion signals, proactive outreach, and retention playbooks.",
+    "This plan targets a defined set of high-value accounts with personalized, multi-channel outreach coordinated between sales and marketing.",
+  inbound_demand_gen:
+    "This plan builds scalable demand capture through content marketing, SEO optimization, and automated lead nurturing programs.",
+  hybrid_plg_sales:
+    "This plan combines product-led acquisition with sales-assisted expansion, using PQL signals to prioritize high-intent accounts for outreach.",
+  partner_led:
+    "This plan leverages third-party partners and channel relationships to extend market reach and accelerate growth in new geographies or segments.",
+  ecosystem_led:
+    "This plan focuses on building an integration ecosystem and developer community to drive adoption through platform network effects.",
+  community_led:
+    "This plan builds and engages a user community around the product to drive organic awareness, peer referrals, and advocacy-led growth.",
+  event_led:
+    "This plan uses virtual and in-person events as primary engagement channels to drive awareness, generate leads, and accelerate pipeline.",
+  vertical_specific:
+    "This plan targets a specific industry vertical with tailored messaging, compliance positioning, and industry-specific proof points.",
 }
 
 const motionLibraryById: Record<MotionId, GtmMotion> = Object.fromEntries(
