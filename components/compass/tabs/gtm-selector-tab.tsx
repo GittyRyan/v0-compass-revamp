@@ -107,7 +107,7 @@ const motionMetadata: Record<
     id: 1,
     drivers: [
       "Strong alignment with enterprise ICP targeting",
-      "High-intent signals detected in account",
+      "High-intent signals detected in target accounts",
       "Proven success pattern in your vertical",
     ],
     socialProof: "~72% of market leaders in your vertical use this motion.",
@@ -449,44 +449,34 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
   }, [])
 
   const confirmModalAction = useCallback(() => {
-    const { type, planId, currentActivePlan, oldestArchivedPlan, targetPlan } = confirmModal
+    const { type, planId, currentActivePlan, oldestArchivedPlan } = confirmModal
 
     if (type === "switch-active" && planId && currentActivePlan) {
-      // First archive the current active plan
-      const archiveResult = applyStatusChange(planLibrary, currentActivePlan.id, "archived")
-      if (archiveResult.success) {
-        // Then activate the new plan
-        const activateResult = applyStatusChange(archiveResult.data, planId, "active")
+      // Deactivate current, activate new
+      let lib = planLibrary
+      const deactivateResult = applyStatusChange(lib, currentActivePlan.id, "saved")
+      if (deactivateResult.success) {
+        lib = deactivateResult.data
+        const activateResult = applyStatusChange(lib, planId, "active")
         if (activateResult.success) {
           persistLibrary(activateResult.data)
-          toast({
-            title: "Active Plan Switched",
-            description: `"${targetPlan?.name}" is now the active plan. Previous active plan was archived.`,
-          })
         }
       }
     } else if (type === "archive-overflow" && planId && oldestArchivedPlan) {
-      // Delete oldest archived plan, then archive
-      const deleteResult = deletePlan(planLibrary, oldestArchivedPlan.id)
-      if (deleteResult.success) {
-        const archiveResult = applyStatusChange(deleteResult.data, planId, "archived")
-        if (archiveResult.success) {
-          persistLibrary(archiveResult.data)
-        }
+      // Force archive with overflow deletion
+      const result = applyStatusChange(planLibrary, planId, "archived", { forceArchiveOverflow: true })
+      if (result.success) {
+        persistLibrary(result.data)
       }
     } else if (type === "delete" && planId) {
       const result = deletePlan(planLibrary, planId)
       if (result.success) {
         persistLibrary(result.data)
-        toast({
-          title: "Plan Deleted",
-          description: "The GTM plan was permanently deleted.",
-        })
       }
     }
 
     setConfirmModal({ open: false, type: "switch-active" })
-  }, [confirmModal, planLibrary, persistLibrary, toast])
+  }, [confirmModal, planLibrary, persistLibrary])
 
   const clampPercent = (value?: number) => Math.min(100, Math.max(0, value ?? 0))
 
@@ -656,7 +646,7 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
       timeHorizon,
       targetMarketGeography,
       scoresById,
-      motionLibraryById, // Added missing dependency
+      motionLibraryById, // Added dependency for motionLibraryById
     ],
   )
 
@@ -798,8 +788,8 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
     targetMarketGeography,
     scoresById,
     toast,
-    motionLibraryById,
-    hasActivePlan, // Added hasActivePlan dependency
+    motionLibraryById, // Added dependency for motionLibraryById
+    hasActivePlan,
   ])
 
   const sortedMotions = useMemo(() => {
@@ -911,10 +901,10 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
     acvBand,
     targetPersonas,
     timeHorizon,
-    targetMarketGeography, // Added missing dependency
+    targetMarketGeography,
     scoresById,
     toast,
-    motionLibraryById, // Added missing dependency
+    motionLibraryById, // Added dependency for motionLibraryById
   ])
 
   return (

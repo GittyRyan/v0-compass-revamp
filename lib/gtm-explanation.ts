@@ -106,36 +106,98 @@ export function buildWhyRecommendation(
     )
   }
 
-  // 5) Timeline impact on effort
-  if (inputs.timeHorizonMonths === 3) {
-    reasons.push(
-      `Effort is higher due to an aggressive 3-month execution timeline, requiring compressed coordination and faster ramp-up.`,
-    )
-  } else if (inputs.timeHorizonMonths === 6) {
-    reasons.push(`A 6-month timeline adds moderate execution pressure, slightly increasing the effort required.`)
-  } else if (inputs.timeHorizonMonths === 12) {
-    reasons.push(
-      `Effort is slightly reduced because this motion allows more distributed execution over a 12-month window.`,
-    )
-  }
-  // Note: 9-month timeline is baseline, no specific explanation needed
+  const deltas = scores.effortDeltas
 
-  // 6) Effort vs Impact summary
-  if (scores.effort <= 55) {
-    reasons.push(`Execution lift is relatively low for your current stage and team.`)
-  } else if (scores.effort >= 75) {
+  // Time compression explanation
+  if (deltas.timeCompression >= 20) {
     reasons.push(
-      `This is a heavier-lift motion operationally and will require significant coordination across functions.`,
+      `Effort is significantly higher because you're compressing a ${motion.recommendedHorizonMonths}-month motion into ${inputs.timeHorizonMonths} months.`,
+    )
+  } else if (deltas.timeCompression >= 10) {
+    reasons.push(
+      `Effort is elevated due to a compressed timeline (${inputs.timeHorizonMonths} months vs the recommended ${motion.recommendedHorizonMonths} months).`,
+    )
+  } else if (deltas.timeCompression <= -5) {
+    reasons.push(
+      `Effort is reduced because your ${inputs.timeHorizonMonths}-month timeline gives generous runway for this motion.`,
     )
   }
 
+  // Segment complexity explanation
+  if (deltas.segmentComplexity >= 15) {
+    reasons.push(
+      `Effort is higher due to enterprise scale and multi-region (${inputs.targetMarketGeography || "Global"}) complexity.`,
+    )
+  } else if (deltas.segmentComplexity >= 10) {
+    reasons.push(
+      `Effort increases due to ${inputs.companySize === "enterprise" ? "enterprise-scale" : "geographic"} complexity.`,
+    )
+  }
+
+  // Persona complexity explanation
+  if (deltas.personaComplexity >= 15) {
+    reasons.push(
+      `Effort is higher because you're targeting ${inputs.personas.length} personas including senior stakeholders, requiring multi-threaded engagement.`,
+    )
+  } else if (deltas.personaComplexity >= 10) {
+    reasons.push(
+      `Effort increases due to a larger buying committee (${inputs.personas.length} personas) requiring coordinated outreach.`,
+    )
+  }
+
+  // Motion ops explanation
+  if (deltas.motionOps >= 15) {
+    reasons.push(
+      `Effort is elevated because this motion requires heavy orchestration across ${motion.channelCount} channels.`,
+    )
+  } else if (deltas.motionOps >= 10) {
+    reasons.push(`Effort is moderately higher due to multi-channel coordination required by this motion.`)
+  }
+
+  // Overall effort summary
+  if (scores.effort >= 80) {
+    reasons.push(
+      `Overall effort is high due to a combination of timeline compression, segment complexity, persona count, and operational intensity.`,
+    )
+  } else if (scores.effort <= 40) {
+    reasons.push(
+      `Overall effort stays low because this motion targets a narrow audience with fewer channels and a generous timeline.`,
+    )
+  }
+
+  // Motion Fit Multiplier explanation
+  if (scores.motionFitMultiplier > 1.0) {
+    reasons.push(
+      `Impact is boosted because this motion strongly aligns with your GTM objective, target personas, and company size.`,
+    )
+  } else if (scores.motionFitMultiplier < 1.0) {
+    reasons.push(`Impact is reduced because this motion is only a partial fit for your objective and segment.`)
+  }
+
+  // Execution Horizon Multiplier explanation
+  if (inputs.timeHorizonMonths === 3 && scores.executionHorizonMultiplier < 1.0) {
+    reasons.push(`Impact is constrained by a short 3-month execution horizon.`)
+  } else if (inputs.timeHorizonMonths === 12 && scores.executionHorizonMultiplier > 1.0) {
+    reasons.push(`Impact is increased by a longer 12-month execution horizon, giving this motion time to compound.`)
+  } else if (inputs.timeHorizonMonths === 9 && scores.executionHorizonMultiplier > 1.0) {
+    reasons.push(`Impact benefits from a 9-month execution window, allowing sufficient time for momentum to build.`)
+  }
+
+  // Market Context Multiplier explanation (ACV-driven)
+  if (inputs.acvBand === "high" && scores.marketContextMultiplier > 1.0) {
+    reasons.push(`High ACV deals increase the potential impact of this motion.`)
+  } else if (inputs.acvBand === "low" && scores.marketContextMultiplier < 1.0) {
+    reasons.push(`Lower ACV deals reduce the potential impact per opportunity, requiring higher volume.`)
+  }
+
+  // Impact summary
   if (scores.impact >= 85) {
     reasons.push(`If executed well, this motion has high upside potential for pipeline and revenue.`)
   } else if (scores.impact >= 70) {
     reasons.push(`This motion offers solid upside with a balanced risk–return profile.`)
   }
 
-  // 7) Overall match narrative
+  // 8) Overall match narrative
   if (scores.matchPercent >= 85) {
     reasons.push(`Overall, this motion is a strong fit for your current GTM situation.`)
   } else if (scores.matchPercent >= 70) {

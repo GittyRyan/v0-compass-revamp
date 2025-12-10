@@ -6,6 +6,8 @@ export type GtmMotionCategory = "acquisition" | "expansion" | "market_entry" | "
 
 export type GtmMotionMaturity = "emerging" | "standard" | "advanced"
 
+export type OpsIntensity = "light" | "moderate" | "heavy"
+
 export type GtmMotion = {
   id: MotionId
   name: string
@@ -22,6 +24,10 @@ export type GtmMotion = {
   bestForObjectives: GtmObjective[]
   bestForAcv: AcvBand[]
   bestForPersonas: string[]
+
+  recommendedHorizonMonths: 3 | 6 | 9 | 12 // motion's ideal time window
+  opsIntensity: OpsIntensity // orchestration complexity
+  channelCount: number // how many channels this motion relies on
 
   // GTM-library metadata for richer UX
   typicalUseCases: string[] // bullets shown in details drawers, docs, etc.
@@ -44,12 +50,16 @@ export const GTM_MOTION_LIBRARY: GtmMotion[] = [
     category: "acquisition",
     maturityLevel: "advanced",
 
-    baseEffort: 70,
-    baseImpact: 85,
+    baseEffort: 55, // moderate base, deltas will push it up for complex scenarios
+    baseImpact: 58,
     bestForSizes: ["mid", "enterprise"],
     bestForObjectives: ["pipeline", "expansion"],
     bestForAcv: ["mid", "high"],
     bestForPersonas: ["VP Sales", "CRO", "RevOps"],
+
+    recommendedHorizonMonths: 9, // ABM needs time to build relationships
+    opsIntensity: "heavy", // high coordination across sales, marketing, SDRs
+    channelCount: 4, // email, calls, LinkedIn, events
 
     typicalUseCases: [
       "Enterprise or upper mid-market SaaS with defined ICP and sales team",
@@ -74,12 +84,16 @@ export const GTM_MOTION_LIBRARY: GtmMotion[] = [
     category: "acquisition",
     maturityLevel: "standard",
 
-    baseEffort: 65,
-    baseImpact: 90,
+    baseEffort: 40, // lower base, mostly product-driven
+    baseImpact: 62,
     bestForSizes: ["smb", "mid"],
     bestForObjectives: ["pipeline", "awareness"],
     bestForAcv: ["low", "mid"],
     bestForPersonas: ["VP Product", "Growth", "Marketing"],
+
+    recommendedHorizonMonths: 6, // PLG can show results quickly
+    opsIntensity: "light", // low coordination, product does the work
+    channelCount: 3, // in-product, email, website
 
     typicalUseCases: [
       "Self-serve SaaS with free trial or freemium tier",
@@ -104,12 +118,16 @@ export const GTM_MOTION_LIBRARY: GtmMotion[] = [
     category: "market_entry",
     maturityLevel: "standard",
 
-    baseEffort: 60,
-    baseImpact: 80,
+    baseEffort: 50, // moderate base, vertical specialization adds complexity
+    baseImpact: 55,
     bestForSizes: ["mid", "enterprise"],
     bestForObjectives: ["pipeline", "new_market"],
     bestForAcv: ["mid", "high"],
     bestForPersonas: ["VP Sales", "Industry GM"],
+
+    recommendedHorizonMonths: 9, // verticals need time to build credibility
+    opsIntensity: "heavy", // requires specialized content, sales training, partner work
+    channelCount: 4, // events, partners, outbound, content
 
     typicalUseCases: [
       "Expanding into a priority vertical (e.g., Financial Services, Healthcare)",
@@ -139,12 +157,16 @@ export const GTM_MOTION_LIBRARY: GtmMotion[] = [
     category: "acquisition",
     maturityLevel: "standard",
 
-    baseEffort: 55,
-    baseImpact: 78,
+    baseEffort: 45, // moderate base, content production is ongoing
+    baseImpact: 52,
     bestForSizes: ["smb", "mid"],
     bestForObjectives: ["pipeline", "awareness"],
     bestForAcv: ["low", "mid"],
     bestForPersonas: ["CMO", "VP Marketing", "Growth"],
+
+    recommendedHorizonMonths: 6, // inbound can ramp in 6 months
+    opsIntensity: "moderate", // content + campaigns + attribution
+    channelCount: 4, // SEO, paid search, paid social, webinars
 
     typicalUseCases: [
       "Building predictable inbound pipeline over 6–12 months",
@@ -169,12 +191,16 @@ export const GTM_MOTION_LIBRARY: GtmMotion[] = [
     category: "expansion",
     maturityLevel: "advanced",
 
-    baseEffort: 58,
-    baseImpact: 88,
+    baseEffort: 45, // moderate base, requires CS/AM coordination
+    baseImpact: 65,
     bestForSizes: ["mid", "enterprise"],
     bestForObjectives: ["expansion"],
     bestForAcv: ["mid", "high"],
     bestForPersonas: ["CS Leader", "Account Manager", "CRO"],
+
+    recommendedHorizonMonths: 6, // expansion can happen faster with existing relationships
+    opsIntensity: "moderate", // CS + product + sales coordination
+    channelCount: 4, // CS, in-product, email, QBRs
 
     typicalUseCases: [
       "Growing NRR via cross-sell and upsell into existing accounts",
@@ -205,6 +231,9 @@ export const MOTION_CONFIGS_FROM_LIBRARY: MotionConfig[] = GTM_MOTION_LIBRARY.ma
   bestForAcv: motion.bestForAcv,
   bestForPersonas: motion.bestForPersonas,
   weightSignals: 0.6,
+  recommendedHorizonMonths: motion.recommendedHorizonMonths,
+  opsIntensity: motion.opsIntensity,
+  channelCount: motion.channelCount,
 }))
 
 export const MOTION_CONFIGS = MOTION_CONFIGS_FROM_LIBRARY
