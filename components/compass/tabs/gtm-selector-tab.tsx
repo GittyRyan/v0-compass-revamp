@@ -1,6 +1,7 @@
 "use client"
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip"
 
 import { CardTitle } from "@/components/ui/card"
 
@@ -13,7 +14,6 @@ import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import {
   Select,
   SelectContent,
@@ -64,6 +64,7 @@ import {
   Eye,
   Upload,
   FileInput,
+  Info,
 } from "lucide-react"
 import { MOTION_CONFIGS, MOTION_LIBRARY, type GtmMotion } from "@/lib/gtm-motions"
 import type { MotionId } from "@/lib/gtm-scoring"
@@ -404,7 +405,7 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
   const [brandVoice, setBrandVoice] = useState("")
   const [salesCycleBucket, setSalesCycleBucket] = useState<string | undefined>(undefined)
   const [seasonalContext, setSeasonalContext] = useState<SeasonalContext>("neutral")
-  const [seasonalNotes, setSeasonalNotes] = useState("")
+  // Removed: const [seasonalNotes, setSeasonalNotes] = useState("")
 
   const [selectedMotion, setSelectedMotion] = useState<MotionId | null>(null)
   const [showWhyExpanded, setShowWhyExpanded] = useState<Record<string, boolean>>({})
@@ -430,6 +431,30 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
     currentName: string
   }>({ planId: null, currentName: "" })
 
+  const resetAllInputs = useCallback(() => {
+    setCompanyName("")
+    setCompanyUrl("")
+    setCompanySize("")
+    setHqCountry("")
+    setIndustry("")
+    setTargetMarketGeography("")
+    setTargetIndustry("")
+    setTargetCompanySize("")
+    setTargetDepartments([])
+    setTargetPersonas("")
+    setPrimaryObjective("")
+    setTimeHorizon("6")
+    setAcvBand("")
+    setPrimaryOffering("")
+    setTargetBuyerStage("")
+    setBrandVoice("")
+    setSalesCycleBucket(undefined)
+    setSeasonalContext("neutral")
+    // Removed: setSeasonalNotes("")
+    setSelectedMotion(null)
+    setShowWhyExpanded({})
+  }, [])
+
   useEffect(() => {
     if (flowType === "gtm-insight") {
       setCompanyName(MOCK_COMPANY_PROFILE.companyName)
@@ -438,30 +463,9 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
       if (!companySize) setCompanySize(MOCK_COMPANY_PROFILE.companySize)
       if (!industry) setIndustry(MOCK_COMPANY_PROFILE.industry)
     } else {
-      setCompanyName("")
-      setCompanyUrl("")
-      // Reset companySize and industry for non-GTM-insight flows
-      setCompanySize("")
-      setIndustry("")
-      setHqCountry("")
-      setTargetMarketGeography("")
-      setTargetIndustry("")
-      setTargetCompanySize("")
-      setTargetPersonas("")
-      setPrimaryObjective("")
-      setTimeHorizon("6")
-      setAcvBand("")
-      setPrimaryOffering("")
-      setTargetBuyerStage("")
-      setBrandVoice("")
-      setSelectedMotion(null)
-      setShowWhyExpanded({})
-      // Reset Optional Enhancers V2 state
-      setSalesCycleBucket(undefined)
-      setSeasonalContext("neutral")
-      setSeasonalNotes("")
+      resetAllInputs() // Use resetAllInputs to clear all fields
     }
-  }, [flowType, companySize, industry]) // Added dependencies
+  }, [flowType, companySize, industry, resetAllInputs]) // Added dependencies
 
   useEffect(() => {
     let lib = loadPlanLibrary(DEFAULT_TENANT_ID)
@@ -706,7 +710,7 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
       salesCycleDays,
       salesCycleBucket,
       seasonalContext,
-      seasonalNotes: seasonalNotes || undefined,
+      // Removed: seasonalNotes
     }),
     [
       companyName,
@@ -721,7 +725,7 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
       salesCycleDays,
       salesCycleBucket,
       seasonalContext,
-      seasonalNotes,
+      // Removed: seasonalNotes
     ],
   )
 
@@ -894,7 +898,7 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
         salesCycleDays,
         salesCycleBucket,
         seasonalContext,
-        seasonalNotes: seasonalNotes || undefined,
+        // Removed: seasonalNotes: seasonalNotes || undefined,
       })
 
       if (!newPlanResult.success) {
@@ -934,7 +938,7 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
           salesCycleDays,
           salesCycleBucket,
           seasonalContext,
-          seasonalNotes: seasonalNotes || undefined,
+          // Removed: seasonalNotes
         })
 
         if (strategyResult.success) {
@@ -985,7 +989,7 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
     salesCycleDays,
     salesCycleBucket,
     seasonalContext,
-    seasonalNotes,
+    // Removed: seasonalNotes,
     toast,
     motionLibraryById,
   ])
@@ -1347,6 +1351,7 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
             </CardContent>
           </Card>
 
+          {/* Optional Enhancers UI - V2.5 refinements */}
           <Collapsible>
             <Card>
               <CollapsibleTrigger asChild>
@@ -1391,13 +1396,25 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
                     </Select>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs">Typical Sales Cycle Length</Label>
+                    <Label className="text-xs flex items-center gap-1">
+                      Sales Cycle
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Info className="h-3 w-3 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className="max-w-[200px]">
+                            From first qualified meeting to closed-won for new logos or major expansions.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </Label>
                     <Select
                       value={salesCycleBucket ?? ""}
                       onValueChange={(value) => setSalesCycleBucket(value || undefined)}
                     >
                       <SelectTrigger className="h-9 text-sm">
-                        <SelectValue placeholder="Optional" />
+                        <SelectValue placeholder="Select cycle" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="0-30">0–30 days</SelectItem>
@@ -1409,18 +1426,27 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
                         <SelectItem value="unknown">Not sure / varies</SelectItem>
                       </SelectContent>
                     </Select>
-                    <p className="text-xs text-muted-foreground">
-                      From first qualified meeting to closed-won for new logos or major expansions.
-                    </p>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs">Current GTM Season</Label>
+                    <Label className="text-xs flex items-center gap-1">
+                      Current GTM Season
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Info className="h-3 w-3 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className="max-w-[220px]">
+                            Aligns GTM with budget cycles, buying behavior, and seasonal demand patterns.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </Label>
                     <Select
                       value={seasonalContext}
                       onValueChange={(value) => setSeasonalContext(value as SeasonalContext)}
                     >
                       <SelectTrigger className="h-9 text-sm">
-                        <SelectValue />
+                        <SelectValue placeholder="Select GTM season" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="neutral">Neutral / No strong seasonal effect</SelectItem>
@@ -1430,19 +1456,6 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
                         <SelectItem value="q4">Q4 – Budget Deadline & Procurement Drag</SelectItem>
                       </SelectContent>
                     </Select>
-                    <p className="text-xs text-muted-foreground">
-                      Aligns strategy with budget cycles, buying behavior, and external timing.
-                    </p>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Seasonal Notes (optional)</Label>
-                    <Textarea
-                      value={seasonalNotes}
-                      onChange={(e) => setSeasonalNotes(e.target.value)}
-                      placeholder="e.g., EU fiscal year ends in March, GovTech awards cluster in Q3."
-                      rows={2}
-                      className="text-sm"
-                    />
                   </div>
                 </CardContent>
               </CollapsibleContent>

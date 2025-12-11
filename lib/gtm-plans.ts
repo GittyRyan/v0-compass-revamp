@@ -33,7 +33,6 @@ export interface GtmPlan {
   salesCycleDays?: number
   salesCycleBucket?: string
   seasonalContext?: "neutral" | "q1" | "q2" | "q3" | "q4"
-  seasonalNotes?: string
 
   createdAt: string // ISO
   updatedAt: string // ISO

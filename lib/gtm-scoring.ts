@@ -48,7 +48,6 @@ export interface SelectorInputs {
   salesCycleDays?: number
   salesCycleBucket?: string
   seasonalContext?: SeasonalContext
-  seasonalNotes?: string
 }
 
 export interface MotionConfig {

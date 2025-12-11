@@ -13,7 +13,6 @@ export interface SalesContext {
   salesCycleDays?: number
   salesCycleBucket?: string
   seasonalContext?: SeasonalContext
-  seasonalNotes?: string
 }
 
 /**
