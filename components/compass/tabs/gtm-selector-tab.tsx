@@ -396,11 +396,11 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
 
   // GTM Goals & Offering
   const [primaryObjective, setPrimaryObjective] = useState("")
-  const [timeHorizon, setTimeHorizon] = useState("6")
+  const [timeHorizon, setTimeHorizon] = useState("")
   const [acvBand, setAcvBand] = useState("")
   const [primaryOffering, setPrimaryOffering] = useState("")
 
-  // Optional Enhancers
+  // GTM Modifiers
   const [targetBuyerStage, setTargetBuyerStage] = useState("")
   const [brandVoice, setBrandVoice] = useState("")
   const [salesCycleBucket, setSalesCycleBucket] = useState<string | undefined>(undefined)
@@ -443,7 +443,7 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
     setTargetDepartments([])
     setTargetPersonas("")
     setPrimaryObjective("")
-    setTimeHorizon("6")
+    setTimeHorizon("") // Reset to empty string
     setAcvBand("")
     setPrimaryOffering("")
     setTargetBuyerStage("")
@@ -652,6 +652,7 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
       !!targetMarketGeography &&
       !!primaryObjective &&
       !!acvBand &&
+      !!timeHorizon &&
       !!targetCompanySize &&
       personas.length > 0
     )
@@ -664,6 +665,7 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
     targetMarketGeography,
     primaryObjective,
     acvBand,
+    timeHorizon,
     targetCompanySize,
     targetPersonas,
   ])
@@ -680,6 +682,8 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
     if (!acvBand) missing.push("ACV Band")
     if (!targetCompanySize) missing.push("Target Company Size")
     if (parsePersonas(targetPersonas).length === 0) missing.push("Target Personas")
+    // Add check for timeHorizon
+    if (!timeHorizon) missing.push("Time Horizon")
     return missing
   }, [
     companyName,
@@ -692,6 +696,7 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
     acvBand,
     targetCompanySize,
     targetPersonas,
+    timeHorizon, // Add timeHorizon to dependencies
   ])
 
   const salesCycleDays = mapSalesCycleBucketToDays(salesCycleBucket)
@@ -1338,7 +1343,7 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
                 </Label>
                 <Select value={timeHorizon} onValueChange={setTimeHorizon}>
                   <SelectTrigger className="h-9 text-sm">
-                    <SelectValue placeholder="Select timeline" />
+                    <SelectValue placeholder="Select execution timeline" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="3">3 months</SelectItem>
@@ -1351,7 +1356,7 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
             </CardContent>
           </Card>
 
-          {/* Optional Enhancers UI - V2.5 refinements */}
+          {/* GTM Modifiers UI - V2.5 refinements */}
           <Collapsible>
             <Card>
               <CollapsibleTrigger asChild>
@@ -1359,7 +1364,7 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
                   <CardTitle className="text-sm font-semibold flex items-center justify-between">
                     <span className="flex items-center gap-2">
                       <SlidersHorizontal className="h-4 w-4" />
-                      Optional Enhancers
+                      GTM Modifiers
                     </span>
                     <ChevronDown className="h-4 w-4 text-muted-foreground" />
                   </CardTitle>
@@ -1367,34 +1372,6 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
               </CollapsibleTrigger>
               <CollapsibleContent>
                 <CardContent className="space-y-3 pt-0">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Target Buyer Stage</Label>
-                    <Select value={targetBuyerStage} onValueChange={setTargetBuyerStage}>
-                      <SelectTrigger className="h-9 text-sm">
-                        <SelectValue placeholder="Select stage" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="awareness">Awareness</SelectItem>
-                        <SelectItem value="consideration">Consideration</SelectItem>
-                        <SelectItem value="decision">Decision</SelectItem>
-                        <SelectItem value="expansion">Expansion</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Brand Voice</Label>
-                    <Select value={brandVoice} onValueChange={setBrandVoice}>
-                      <SelectTrigger className="h-9 text-sm">
-                        <SelectValue placeholder="Select voice" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="professional">Professional</SelectItem>
-                        <SelectItem value="conversational">Conversational</SelectItem>
-                        <SelectItem value="technical">Technical</SelectItem>
-                        <SelectItem value="bold">Bold / Challenger</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs flex items-center gap-1">
                       Sales Cycle
@@ -1449,11 +1426,39 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
                         <SelectValue placeholder="Select GTM season" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="neutral">Neutral / No strong seasonal effect</SelectItem>
+                        <SelectItem value="neutral">No seasonal impact</SelectItem>
                         <SelectItem value="q1">Q1 – New Budgets & Planning</SelectItem>
                         <SelectItem value="q2">Q2 – Execution Peak</SelectItem>
                         <SelectItem value="q3">Q3 – Mixed / Summer Slowdown</SelectItem>
                         <SelectItem value="q4">Q4 – Budget Deadline & Procurement Drag</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Target Buyer Stage</Label>
+                    <Select value={targetBuyerStage} onValueChange={setTargetBuyerStage}>
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue placeholder="Select stage" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="awareness">Awareness</SelectItem>
+                        <SelectItem value="consideration">Consideration</SelectItem>
+                        <SelectItem value="decision">Decision</SelectItem>
+                        <SelectItem value="expansion">Expansion</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Brand Voice</Label>
+                    <Select value={brandVoice} onValueChange={setBrandVoice}>
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue placeholder="Select voice" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="professional">Professional</SelectItem>
+                        <SelectItem value="conversational">Conversational</SelectItem>
+                        <SelectItem value="technical">Technical</SelectItem>
+                        <SelectItem value="bold">Bold / Challenger</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1482,6 +1487,7 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
                         "ACV",
                         "Target Size",
                         "Personas",
+                        "Time Horizon", // Added Time Horizon
                       ].map((field) => {
                         const isSet = !missingInputs.includes(
                           field === "Objective"
@@ -1500,7 +1506,9 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
                                         ? "HQ Country"
                                         : field === "Personas"
                                           ? "Target Personas"
-                                          : field,
+                                          : field === "Time Horizon"
+                                            ? "Time Horizon" // Added condition for Time Horizon
+                                            : field,
                         )
                         return (
                           <Badge
@@ -1735,6 +1743,10 @@ export function GTMSelectorTab({ onActivePlanChange, flowType = "gtm-insight" }:
                     </Badge>
                     <Badge variant="secondary" className="text-xs">
                       ACV: {acvBand || "—"}
+                    </Badge>
+                    {/* Display Time Horizon */}
+                    <Badge variant="secondary" className="text-xs">
+                      {timeHorizon || "—"}mo Horizon
                     </Badge>
                   </div>
                 </div>
