@@ -31,6 +31,8 @@ export type MotionId =
 
 export type OpsIntensity = "light" | "moderate" | "heavy"
 
+export type SeasonalContext = "neutral" | "q1" | "q2" | "q3" | "q4"
+
 export interface SelectorInputs {
   companyName?: string
   companyUrl?: string
@@ -43,6 +45,10 @@ export interface SelectorInputs {
   acvBand?: AcvBand
   personas: string[]
   timeHorizonMonths: 3 | 6 | 9 | 12
+  salesCycleDays?: number
+  salesCycleBucket?: string
+  seasonalContext?: SeasonalContext
+  seasonalNotes?: string
 }
 
 export interface MotionConfig {
@@ -80,6 +86,8 @@ export interface MotionScoreBreakdown {
     segmentComplexity: number
     personaComplexity: number
     motionOps: number
+    salesCycleEffort: number
+    seasonalityEffort: number
   }
 }
 
@@ -231,6 +239,68 @@ function getExecutionHorizonMultiplier(inputs: SelectorInputs): number {
   }
 }
 
+function salesCycleMultiplier(inputs: SelectorInputs): number {
+  const { salesCycleDays, timeHorizonMonths, primaryObjective } = inputs
+  if (!salesCycleDays || !timeHorizonMonths) return 1
+
+  // Only apply to performance objectives
+  const perfObjectives: GtmObjective[] = ["pipeline", "expansion"]
+  if (!primaryObjective || !perfObjectives.includes(primaryObjective)) {
+    return 1
+  }
+
+  const horizonDays = timeHorizonMonths * 30
+  const ratio = horizonDays / salesCycleDays
+
+  if (ratio >= 1.5) return 1.0
+  if (ratio >= 1.0) return 0.95
+  if (ratio >= 0.75) return 0.9
+  if (ratio >= 0.5) return 0.8
+  return 0.7
+}
+
+function seasonalityMultiplier(inputs: SelectorInputs, motion: MotionConfig): number {
+  const context = inputs.seasonalContext ?? "neutral"
+  if (context === "neutral") return 1.0
+
+  const motionId = motion.id
+  let multiplier = 1.0
+
+  switch (context) {
+    case "q1":
+      // Q1: New budgets - good for expansion/sales-led
+      if (motionId === "sales_led" || motionId === "outbound_abm") {
+        multiplier = 1.05
+      } else {
+        multiplier = 0.95
+      }
+      break
+    case "q2":
+      // Q2: Execution peak - good for most motions
+      multiplier = 1.05
+      break
+    case "q3":
+      // Q3: Summer slowdown - good for event/community
+      if (motionId === "event_led" || motionId === "community_led") {
+        multiplier = 1.05
+      } else {
+        multiplier = 0.95
+      }
+      break
+    case "q4":
+      // Q4: Budget deadline - good for sales-led/ABM/vertical
+      if (motionId === "sales_led" || motionId === "outbound_abm" || motionId === "vertical_specific") {
+        multiplier = 1.05
+      } else {
+        multiplier = 0.95
+      }
+      break
+  }
+
+  // Clamp between 0.9 and 1.1
+  return Math.min(1.1, Math.max(0.9, multiplier))
+}
+
 // ---- Effort V2 Helper Functions ----
 
 function calcTimeCompressionDelta(recommendedHorizonMonths: number, selectedHorizonMonths: number | undefined): number {
@@ -309,6 +379,36 @@ function calcMotionOpsDelta(motion: MotionConfig): number {
   return Math.min(20, total)
 }
 
+function salesCycleEffortDelta(inputs: SelectorInputs): number {
+  const { salesCycleDays, timeHorizonMonths } = inputs
+  if (!salesCycleDays || !timeHorizonMonths) return 0
+
+  const horizonDays = timeHorizonMonths * 30
+  const ratio = horizonDays / salesCycleDays
+
+  if (ratio >= 1.0) return 0
+  if (ratio >= 0.75) return 5
+  if (ratio >= 0.5) return 10
+  return 15
+}
+
+function seasonalityEffortDelta(inputs: SelectorInputs): number {
+  const context = inputs.seasonalContext ?? "neutral"
+
+  switch (context) {
+    case "q2":
+      return -5 // Execution peak - easier
+    case "q3":
+      return 5 // Summer slowdown - harder
+    case "q4":
+      return 10 // Budget deadline - harder
+    case "q1":
+    case "neutral":
+    default:
+      return 0
+  }
+}
+
 // ---- Public scoring API ----
 
 export function scoreMotion(motion: MotionConfig, inputs: SelectorInputs): MotionScoreBreakdown {
@@ -325,18 +425,28 @@ export function scoreMotion(motion: MotionConfig, inputs: SelectorInputs): Motio
   const segmentComplexityDelta = calcSegmentComplexityDelta(inputs)
   const personaComplexityDelta = calcPersonaComplexityDelta(inputs)
   const motionOpsDelta = calcMotionOpsDelta(motion)
+  const salesEffort = salesCycleEffortDelta(inputs)
+  const seasonEffort = seasonalityEffortDelta(inputs)
 
   const effort = clampPercent(
-    motion.baseEffort + timeCompressionDelta + segmentComplexityDelta + personaComplexityDelta + motionOpsDelta,
+    motion.baseEffort +
+      timeCompressionDelta +
+      segmentComplexityDelta +
+      personaComplexityDelta +
+      motionOpsDelta +
+      salesEffort +
+      seasonEffort,
   )
 
   const baseImpact = motion.baseImpact
   const motionFitMultiplier = getMotionFitMultiplier(fitScore)
   const marketContextMultiplier = getMarketContextMultiplier(inputs)
   const executionHorizonMultiplier = getExecutionHorizonMultiplier(inputs)
+  const salesMult = salesCycleMultiplier(inputs)
+  const seasonMult = seasonalityMultiplier(inputs, motion)
 
   const dynamicImpact = clampPercent(
-    baseImpact * motionFitMultiplier * marketContextMultiplier * executionHorizonMultiplier,
+    baseImpact * motionFitMultiplier * marketContextMultiplier * executionHorizonMultiplier * salesMult * seasonMult,
   )
 
   const matchPercent = clamp(round(0.4 * fitScore + 0.3 * dynamicImpact + 0.3 * (100 - effort)), 0, 100)
@@ -360,6 +470,8 @@ export function scoreMotion(motion: MotionConfig, inputs: SelectorInputs): Motio
       segmentComplexity: segmentComplexityDelta,
       personaComplexity: personaComplexityDelta,
       motionOps: motionOpsDelta,
+      salesCycleEffort: salesEffort,
+      seasonalityEffort: seasonEffort,
     },
   }
 }

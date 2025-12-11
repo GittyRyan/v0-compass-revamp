@@ -3,10 +3,18 @@
 
 import type { GtmPlan } from "@/lib/gtm-plans"
 import type { GtmPlanPreview } from "@/lib/gtm-preview"
+import type { SeasonalContext } from "@/lib/gtm-scoring"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Request/Response Types
 // ─────────────────────────────────────────────────────────────────────────────
+
+export interface SalesContext {
+  salesCycleDays?: number
+  salesCycleBucket?: string
+  seasonalContext?: SeasonalContext
+  seasonalNotes?: string
+}
 
 /**
  * Request payload for strategy generation
@@ -16,6 +24,7 @@ export interface StrategyGenerationRequest {
   tenantId: string // Tenant identifier from plan library
   source: "gtm-selector" // Where the request originated
   preview?: GtmPlanPreview // Optional preview context for LLM
+  salesContext?: SalesContext
 }
 
 /**
@@ -88,23 +97,27 @@ function isStrategyGenerationResult(obj: unknown): obj is StrategyGenerationResu
  *
  * @param plan - The active GTM plan to generate strategy for
  * @param preview - Optional preview context to inform LLM generation
+ * @param salesContext - Optional sales cycle and seasonal context
  * @returns Promise<StrategyGenerationResult>
  */
 export async function generateGtmStrategyForPlan(
   plan: GtmPlan,
   preview?: GtmPlanPreview,
+  salesContext?: SalesContext,
 ): Promise<StrategyGenerationResult> {
   const request: StrategyGenerationRequest = {
     plan,
     tenantId: plan.tenantId,
     source: "gtm-selector",
     preview,
+    salesContext,
   }
 
   console.log("[StrategyService] Sending strategy generation request", {
     planId: plan.id,
     planName: plan.name,
     tenantId: plan.tenantId,
+    hasSalesContext: !!salesContext,
   })
 
   try {

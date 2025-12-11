@@ -609,6 +609,7 @@ function generateExecutionTheme(
   classification: EffortClassification,
   horizonMonths: number,
   companySize: string,
+  seasonalContext?: string,
 ): string {
   const intensityDescriptor =
     classification === "lightweight"
@@ -621,11 +622,45 @@ function generateExecutionTheme(
 
   const timeframeDescriptor = horizonMonths <= 6 ? "accelerated" : "methodical"
 
-  return `This is a ${intensityDescriptor}, ${timeframeDescriptor} ${horizonMonths}-month execution of ${motionName}, tailored for ${companySize} organizations. The plan emphasizes quick wins in early phases while building toward sustainable, scalable outcomes.`
+  let baseTheme = `This is a ${intensityDescriptor}, ${timeframeDescriptor} ${horizonMonths}-month execution of ${motionName}, tailored for ${companySize} organizations. The plan emphasizes quick wins in early phases while building toward sustainable, scalable outcomes.`
+
+  if (seasonalContext && seasonalContext !== "neutral") {
+    const seasonClauses: Record<string, string> = {
+      q1: "This plan is tuned for Q1 with fresh budgets and annual planning cycles.",
+      q2: "This plan leverages Q2's execution peak when buying momentum is typically strongest.",
+      q3: "This plan accounts for Q3 vacation patterns, focusing on foundational building and event leverage.",
+      q4: "This plan is tuned for Q4 with budget deadlines and heavier procurement cycles.",
+    }
+    baseTheme += ` ${seasonClauses[seasonalContext] || ""}`
+  }
+
+  return baseTheme
 }
 
-function generateKeyRisks(classification: EffortClassification, motionId: MotionId): string[] {
+function generateKeyRisks(
+  classification: EffortClassification,
+  motionId: MotionId,
+  inputs?: { salesCycleDays?: number; timeHorizonMonths?: number; seasonalContext?: string },
+): string[] {
   const baseRisks: string[] = []
+
+  if (inputs?.salesCycleDays && inputs?.timeHorizonMonths) {
+    const horizonDays = inputs.timeHorizonMonths * 30
+    if (inputs.salesCycleDays > horizonDays) {
+      baseRisks.push(
+        "Sales cycle length exceeds the selected horizon; some outcomes will materialize beyond this plan window.",
+      )
+    }
+  }
+
+  if (inputs?.seasonalContext === "q4") {
+    baseRisks.push("Q4 procurement and budget cycles may slow down deal closure; early phases must de-risk approvals.")
+  }
+  if (inputs?.seasonalContext === "q3") {
+    baseRisks.push(
+      "Q3 vacation patterns may slow response times; focus this plan on top-of-funnel building and event leverage.",
+    )
+  }
 
   // Classification-based risks
   if (classification === "heavy" || classification === "transformational") {
@@ -650,7 +685,7 @@ function generateKeyRisks(classification: EffortClassification, motionId: Motion
     vertical_specific: ["Vertical expertise depth constraints", "Limited reference customers in target vertical"],
   }
 
-  return [...baseRisks, ...(motionRisks[motionId] || [])].slice(0, 3)
+  return [...baseRisks, ...(motionRisks[motionId] || [])].slice(0, 4)
 }
 
 function generateKeyDependencies(motionId: MotionId, companySize: string): string[] {
@@ -693,6 +728,7 @@ const LLM_EXPECTATIONS: string[] = [
   "Channel strategy recommendations based on effort and operational intensity",
   "Risk assessment and mitigation plan",
   "KPI modeling and success metrics for the chosen time horizon",
+  "Season- and sales-cycle-aware recommendations that distinguish what can land within the current horizon versus longer-running plays",
 ]
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -732,8 +768,18 @@ export function buildGtmPlanPreview(
     inputs.companySize === "smb" ? "SMB" : inputs.companySize === "mid" ? "Mid-Market" : "Enterprise"
 
   const summary: GtmPlanPreviewSummary = {
-    executionTheme: generateExecutionTheme(motion.name, effortClassification, horizonMonths, companySizeLabel),
-    keyRisks: generateKeyRisks(effortClassification, motion.id),
+    executionTheme: generateExecutionTheme(
+      motion.name,
+      effortClassification,
+      horizonMonths,
+      companySizeLabel,
+      inputs.seasonalContext,
+    ),
+    keyRisks: generateKeyRisks(effortClassification, motion.id, {
+      salesCycleDays: inputs.salesCycleDays,
+      timeHorizonMonths: inputs.timeHorizonMonths,
+      seasonalContext: inputs.seasonalContext,
+    }),
     keyDependencies: generateKeyDependencies(motion.id, inputs.companySize),
   }
 

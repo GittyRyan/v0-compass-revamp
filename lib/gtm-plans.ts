@@ -30,6 +30,11 @@ export interface GtmPlan {
   kpis?: string[]
   timelineMonths: 3 | 6 | 9 | 12
 
+  salesCycleDays?: number
+  salesCycleBucket?: string
+  seasonalContext?: "neutral" | "q1" | "q2" | "q3" | "q4"
+  seasonalNotes?: string
+
   createdAt: string // ISO
   updatedAt: string // ISO
   activatedAt?: string | null
